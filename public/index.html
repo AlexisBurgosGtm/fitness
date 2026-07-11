@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraCal - Control Inteligente de Calorías</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom CSS (Glassmorphism & Elegance) -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Fondo animado/gradiente de fondo -->
+  <div class="bg-gradient-shapes">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark glass-nav sticky-top">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="#" id="brand-logo">
+        <i data-lucide="flame" class="text-warning me-2 animate-pulse"></i>
+        <span class="brand-text">Alexis<span class="text-warning">Cal</span></span>
+      </a>
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 nav-pills">
+          <li class="nav-item">
+            <a class="nav-link active d-flex align-items-center" href="#dashboard" id="nav-dashboard">
+              <i data-lucide="layout-dashboard" class="me-1_5"></i> Dashboard
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-flex align-items-center" href="#agregar" id="nav-agregar">
+              <i data-lucide="plus-circle" class="me-1_5"></i> Agregar alimento
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-flex align-items-center" href="#historial" id="nav-historial">
+              <i data-lucide="calendar" class="me-1_5"></i> Historial
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Contenedor Principal -->
+  <main class="container py-4 my-2">
+    <!-- Notificaciones del Sistema -->
+    <div id="alert-container" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;"></div>
+
+    <!-- SECCIÓN: DASHBOARD -->
+    <section id="view-dashboard" class="spa-view active">
+      <div class="row g-4 mb-4">
+        <div class="col-12 col-md-8">
+          <h1 class="welcome-title">Hola, <span class="gradient-text">¡Bienvenido!</span></h1>
+          <p class="text-muted-custom">Aquí está el resumen de tu consumo de calorías para el día de hoy.</p>
+        </div>
+        <div class="col-12 col-md-4 text-md-end d-flex align-items-center justify-content-md-end">
+          <div class="date-selector-container glass-card p-2 d-inline-flex align-items-center">
+            <i data-lucide="calendar-days" class="text-warning me-2"></i>
+            <input type="date" id="dashboard-date" class="bg-transparent border-0 text-white focus-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila de Tarjetas Resumen -->
+      <div class="row g-4 mb-4">
+        <!-- Meta vs Consumido -->
+        <div class="col-lg-4 col-md-6 col-12">
+          <div class="glass-card card-progress p-4 h-100 position-relative overflow-hidden">
+            <div class="card-glow"></div>
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <div>
+                <h5 class="card-subtitle text-muted-custom text-uppercase fs-7 mb-1">Calorías Hoy</h5>
+                <h2 class="card-title fw-bold m-0" id="dash-calories-consumed">0 <span class="fs-6 fw-normal">kcal</span></h2>
+              </div>
+              <div class="icon-box bg-warning-glow">
+                <i data-lucide="zap" class="text-warning"></i>
+              </div>
+            </div>
+            <div class="progress-bar-container mt-3">
+              <div class="d-flex justify-content-between text-muted-custom fs-7 mb-1">
+                <span>Meta: <span id="dash-calories-target-val">2000</span> kcal</span>
+                <span id="dash-percentage-val">0%</span>
+              </div>
+              <div class="progress progress-custom">
+                <div id="dash-progress-bar" class="progress-bar bg-gradient-warning" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-link text-warning p-0 mt-3 text-decoration-none d-flex align-items-center" id="btn-edit-target">
+              <i data-lucide="edit-3" class="me-1 fs-7"></i> Ajustar Meta Diaria
+            </button>
+          </div>
+        </div>
+
+        <!-- Comidas del Día (Desglose Rápido) -->
+        <div class="col-lg-4 col-md-6 col-12">
+          <div class="glass-card p-4 h-100 position-relative overflow-hidden">
+            <div class="card-glow"></div>
+            <h5 class="card-subtitle text-muted-custom text-uppercase fs-7 mb-3">Distribución por Comida</h5>
+            <div class="meal-breakdown-list">
+              <div class="meal-item d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center">
+                  <span class="dot bg-desayuno me-2"></span>
+                  <span>Desayuno</span>
+                </div>
+                <span class="fw-semibold" id="dash-meal-desayuno">0 kcal</span>
+              </div>
+              <div class="meal-item d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center">
+                  <span class="dot bg-almuerzo me-2"></span>
+                  <span>Almuerzo</span>
+                </div>
+                <span class="fw-semibold" id="dash-meal-almuerzo">0 kcal</span>
+              </div>
+              <div class="meal-item d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center">
+                  <span class="dot bg-cena me-2"></span>
+                  <span>Cena</span>
+                </div>
+                <span class="fw-semibold" id="dash-meal-cena">0 kcal</span>
+              </div>
+              <div class="meal-item d-flex align-items-center justify-content-between mb-0">
+                <div class="d-flex align-items-center">
+                  <span class="dot bg-merienda me-2"></span>
+                  <span>Merienda</span>
+                </div>
+                <span class="fw-semibold" id="dash-meal-merienda">0 kcal</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Promedio y Días Registrados -->
+        <div class="col-lg-4 col-md-12 col-12">
+          <div class="glass-card p-4 h-100 position-relative overflow-hidden d-flex flex-column justify-content-between">
+            <div class="card-glow"></div>
+            <div>
+              <h5 class="card-subtitle text-muted-custom text-uppercase fs-7 mb-3">Estadísticas Generales</h5>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <div class="stat-box p-3 rounded-3 text-center">
+                    <span class="text-muted-custom fs-8 block mb-1">Total Registros</span>
+                    <h4 class="fw-bold m-0" id="dash-stat-total-logs">0</h4>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="stat-box p-3 rounded-3 text-center">
+                    <span class="text-muted-custom fs-8 block mb-1">Días Activos</span>
+                    <h4 class="fw-bold m-0" id="dash-stat-active-days">0</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="d-flex align-items-center text-muted-custom justify-content-center p-2 rounded-3 status-banner">
+              <i data-lucide="info" class="text-info me-2 fs-6"></i>
+              <span class="fs-8">Agrega alimentos consultando a Gemini para expandir tu historial.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila de Gráficos y Últimos Consumos -->
+      <div class="row g-4">
+        <!-- Gráfico del Consumo -->
+        <div class="col-lg-7 col-12">
+          <div class="glass-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h4 class="section-title m-0">Tendencia Semanal</h4>
+              <div class="btn-group btn-group-sm rounded-pill p-1 glass-btn-group" role="group">
+                <button type="button" class="btn btn-glass-active" id="btn-chart-weekly">Últimos 7 días</button>
+              </div>
+            </div>
+            <div class="chart-container position-relative" style="height: 300px;">
+              <canvas id="caloriesChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Últimos Alimentos Consumidos Hoy -->
+        <div class="col-lg-5 col-12">
+          <div class="glass-card p-4 h-100 d-flex flex-column">
+            <h4 class="section-title mb-4">Consumido hoy</h4>
+            <div class="today-logs-container flex-grow-1 overflow-y-auto" style="max-height: 300px;">
+              <ul class="list-group list-group-flush bg-transparent" id="today-logs-list">
+                <!-- Se llenará dinámicamente -->
+                <li class="list-group-item bg-transparent text-center text-muted py-4 border-0">
+                  <i data-lucide="cookie" class="fs-1 text-muted-custom mb-2"></i>
+                  <p class="m-0">No has registrado alimentos para hoy.</p>
+                  <a href="#agregar" class="btn btn-sm btn-outline-warning rounded-pill mt-3 px-3" id="dash-lnk-add">Registrar Primero</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- SECCIÓN: AGREGAR / CONSULTAR GEMINI -->
+    <section id="view-agregar" class="spa-view">
+      <div class="row justify-content-center">
+        <div class="col-lg-8 col-12">
+          <div class="glass-card p-4 md-p-5 position-relative">
+            <div class="d-flex align-items-center mb-4">
+              <div class="icon-box bg-purple-glow me-3">
+                <i data-lucide="sparkles" class="text-purple"></i>
+              </div>
+              <div>
+                <h2 class="section-title m-0">Consulta Inteligente a Gemini</h2>
+                <p class="text-muted-custom m-0">Escribe libremente lo que has comido y nuestra IA determinará las calorías.</p>
+              </div>
+            </div>
+
+            <!-- Formulario de Consulta -->
+            <form id="gemini-query-form" class="needs-validation" novalidate>
+              <div class="row g-3 mb-4">
+                <!-- Tipo de Comida -->
+                <div class="col-md-6 col-12">
+                  <label for="form-meal-type" class="form-label text-muted-custom">Tipo de Comida</label>
+                  <select class="form-select glass-input" id="form-meal-type" required>
+                    <option value="DESAYUNO" selected>Desayuno</option>
+                    <option value="ALMUERZO">Almuerzo</option>
+                    <option value="CENA">Cena</option>
+                    <option value="MERIENDA">Merienda</option>
+                  </select>
+                </div>
+
+                <!-- Fecha -->
+                <div class="col-md-6 col-12">
+                  <label for="form-date" class="form-label text-muted-custom">Fecha del Consumo</label>
+                  <input type="date" class="form-select glass-input text-white" id="form-date" required>
+                </div>
+
+                <!-- Input Consulta de Gemini -->
+                <div class="col-12">
+                  <label for="form-query" class="form-label text-muted-custom">¿Qué has comido hoy?</label>
+                  <textarea class="form-control glass-input" id="form-query" rows="3" 
+                    placeholder="Ej. Desayuné dos huevos revueltos, una tostada de pan integral con palta y una taza de café con leche descremada." required></textarea>
+                  <div class="form-text text-muted-custom fs-8">Sugerencia: Sé lo más específico posible con las cantidades para obtener mejores estimaciones.</div>
+                </div>
+              </div>
+
+              <!-- Botón Consultar -->
+              <div class="text-end">
+                <button type="submit" class="btn btn-warning-custom px-4 py-2 d-inline-flex align-items-center" id="btn-submit-query">
+                  <i data-lucide="sparkles" class="me-2"></i> Consultar a Gemini
+                </button>
+              </div>
+            </form>
+
+            <!-- Spinner de Carga -->
+            <div id="gemini-loading" class="d-none text-center my-5 py-3">
+              <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Consultando a Gemini...</span>
+              </div>
+              <p class="mt-3 text-warning fw-semibold animate-pulse">Gemini está analizando tu comida...</p>
+              <span class="text-muted-custom fs-8">Calculando porciones y calorías estimadas...</span>
+            </div>
+
+            <!-- Tabla de Resultados Pre-Guardado -->
+            <div id="gemini-results-container" class="d-none mt-5">
+              <div class="border-top border-secondary pt-4 mb-3 d-flex justify-content-between align-items-center flex-wrap g-2">
+                <div>
+                  <h4 class="section-title m-0">Resultados del Análisis</h4>
+                  <p class="text-muted-custom fs-8 m-0" id="gemini-source-badge">Respuestas calculadas por Gemini 1.5 Flash</p>
+                </div>
+                <div class="text-end">
+                  <span class="badge bg-warning text-dark fs-7 px-3 py-2" id="gemini-total-temp">Total: 0 kcal</span>
+                </div>
+              </div>
+
+              <div class="table-responsive glass-table-container rounded-3">
+                <table class="table table-dark table-hover m-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col" style="width: 50%">Alimento</th>
+                      <th scope="col" style="width: 25%">Porción Estimada</th>
+                      <th scope="col" style="width: 25%">Calorías (kcal)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="gemini-results-tbody">
+                    <!-- Se llena con JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="form-text text-info mb-4 d-flex align-items-center mt-2">
+                <i data-lucide="info" class="me-1_5 fs-6"></i>
+                <span class="fs-8">Puedes editar directamente los valores en la tabla si deseas realizar algún ajuste.</span>
+              </div>
+
+              <!-- Botones Guardar -->
+              <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary px-4" id="btn-cancel-results">Descartar</button>
+                <button type="button" class="btn btn-warning-custom px-4" id="btn-save-results">
+                  <i data-lucide="check" class="me-1"></i> Guardar en mi Diario
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- SECCIÓN: HISTORIAL -->
+    <section id="view-historial" class="spa-view">
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap g-3 mb-4">
+          <div>
+            <h2 class="section-title m-0">Historial de Alimentos</h2>
+            <p class="text-muted-custom m-0">Visualiza y gestiona todos los registros guardados en tu IndexedDB.</p>
+          </div>
+          <div class="d-flex gap-2">
+            <!-- Filtro de Comida -->
+            <select class="form-select glass-input border-0 py-2 fs-7" id="filter-meal-type" style="width: 140px;">
+              <option value="TODOS" selected>Todas las comidas</option>
+              <option value="DESAYUNO">Desayuno</option>
+              <option value="ALMUERZO">Almuerzo</option>
+              <option value="CENA">Cena</option>
+              <option value="MERIENDA">Merienda</option>
+            </select>
+            <!-- Filtro de Fecha -->
+            <input type="date" id="filter-date" class="form-select glass-input border-0 py-2 fs-7 text-white" style="width: 160px;">
+            <button class="btn btn-glass-icon btn-sm px-2 text-danger" id="btn-clear-filters" title="Limpiar Filtros">
+              <i data-lucide="filter-x"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive glass-table-container rounded-3">
+          <table class="table table-dark table-hover m-0 align-middle">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 15%">Fecha</th>
+                <th scope="col" style="width: 15%">Comida</th>
+                <th scope="col" style="width: 35%">Alimento</th>
+                <th scope="col" style="width: 15%">Porción</th>
+                <th scope="col" style="width: 12%">Calorías</th>
+                <th scope="col" style="width: 8%" class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-tbody">
+              <!-- Se llena con JS -->
+              <tr>
+                <td colspan="6" class="text-center py-5 text-muted-custom">
+                  <i data-lucide="database" class="fs-1 mb-2"></i>
+                  <p class="m-0">No se encontraron registros en tu historial.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pie de historial -->
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap g-2">
+          <span class="text-muted-custom fs-8" id="history-count">Mostrando 0 registros</span>
+          <button class="btn btn-sm btn-outline-danger px-3 py-1_5 d-flex align-items-center" id="btn-delete-all-db">
+            <i data-lucide="trash-2" class="me-1 fs-7"></i> Borrar Todo el Historial
+          </button>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal para ajustar la meta de calorías -->
+  <div class="modal fade" id="modalTargetCalories" tabindex="-1" aria-labelledby="modalTargetCaloriesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass-card border-0">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold text-white" id="modalTargetCaloriesLabel">Ajustar Meta Diaria</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <div class="mb-3">
+            <label for="input-target-calories" class="form-label text-muted-custom">Meta Diaria de Calorías (kcal)</label>
+            <input type="number" class="form-control glass-input text-white" id="input-target-calories" min="500" max="10000" step="50">
+            <div class="form-text text-muted-custom fs-8">Introduce tus calorías objetivo por día.</div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-warning-custom btn-sm" id="btn-save-target-calories">Guardar Cambios</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Botón de Acción Flotante (FAB) Sticky -->
+  <a href="#agregar" class="fab-btn" id="fab-agregar" title="Agregar alimento">
+    <i data-lucide="plus" class="fab-icon"></i>
+    <span class="fab-text">Agregar alimento</span>
+  </a>
+
+  <footer class="container text-center py-4 text-muted-custom border-top border-secondary mt-5 fs-8">
+    <p class="m-0">AlexisCal © 2026. Todos los derechos reservados. Alexis Burgos</p>
+  </footer>
+
+  <!-- Bootstrap 5 Bundle JS (con Popper) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- App JS -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,557 @@
+/* ==========================================================================
+   AuraCal - Estilos Premium Glassmorphism
+   ========================================================================== */
+
+:root {
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  
+  /* Paleta de Colores (Dark Aura Theme) */
+  --bg-primary: #0b0c16;
+  --bg-secondary: #131526;
+  --card-bg: rgba(20, 22, 41, 0.55);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-border-hover: rgba(255, 255, 255, 0.18);
+  --text-primary: #ffffff;
+  --text-muted: #8e95b3;
+  
+  /* Colores de Comidas */
+  --color-desayuno: #38bdf8; /* Celeste */
+  --color-almuerzo: #fb923c; /* Naranja */
+  --color-cena: #f43f5e;     /* Rosa/Rojo */
+  --color-merienda: #a855f7; /* Violeta */
+  
+  /* Gradientes */
+  --gradient-main: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #e11d48 100%);
+  --gradient-dark: linear-gradient(180deg, #131526 0%, #0b0c16 100%);
+}
+
+/* Reset & Estilos Base */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6, .brand-text {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+.text-muted-custom {
+  color: var(--text-muted);
+}
+
+.fs-7 {
+  font-size: 0.85rem;
+}
+
+.fs-8 {
+  font-size: 0.75rem;
+}
+
+.me-1_5 {
+  margin-right: 0.375rem;
+}
+
+/* Fondo Dinámico con Formas Borrosas (Blur Shapes) */
+.bg-gradient-shapes {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  overflow: hidden;
+  background: var(--gradient-dark);
+}
+
+.shape {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.25;
+  mix-blend-mode: screen;
+}
+
+.shape-1 {
+  top: -10%;
+  right: 10%;
+  width: 40vw;
+  height: 40vw;
+  background: #4f46e5;
+  animation: float-slow 20s infinite alternate;
+}
+
+.shape-2 {
+  bottom: -15%;
+  left: 5%;
+  width: 50vw;
+  height: 50vw;
+  background: #a855f7;
+  animation: float-slow 25s infinite alternate-reverse;
+}
+
+.shape-3 {
+  top: 40%;
+  left: 30%;
+  width: 35vw;
+  height: 35vw;
+  background: #db2777;
+  animation: float-slow 30s infinite alternate;
+}
+
+@keyframes float-slow {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(8%, 12%) scale(1.1); }
+}
+
+/* Glassmorphism Navbar */
+.glass-nav {
+  background: rgba(11, 12, 22, 0.6);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-bottom: 1px solid var(--card-border);
+  transition: all 0.3s ease;
+}
+
+.brand-text {
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.5px;
+}
+
+/* Botones Nav Activos */
+.navbar-nav .nav-link {
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 0.5rem 1rem !important;
+  border-radius: 20px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.95rem;
+  border: 1px solid transparent;
+}
+
+.navbar-nav .nav-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.navbar-nav .nav-link.active {
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Tarjetas Glassmorphism */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.25);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              border-color 0.3s ease, 
+              box-shadow 0.3s ease;
+}
+
+.glass-card:hover {
+  border-color: var(--card-border-hover);
+  box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.35);
+  transform: translateY(-2px);
+}
+
+.card-glow {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
+  top: -50px;
+  right: -50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Iconos Decorativos */
+.icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  z-index: 1;
+}
+
+.bg-warning-glow {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.bg-purple-glow {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.text-purple {
+  color: #c084fc;
+}
+
+/* Títulos y Gradientes de Texto */
+.welcome-title {
+  font-weight: 800;
+  font-size: 2.25rem;
+}
+
+.gradient-text {
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: inline-block;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 1.35rem;
+  position: relative;
+}
+
+/* Elementos de Progreso */
+.progress-custom {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  height: 10px;
+  border-radius: 20px;
+  overflow: visible;
+}
+
+.progress-bar-container {
+  z-index: 1;
+}
+
+.bg-gradient-warning {
+  background: var(--gradient-warning);
+  border-radius: 20px;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+}
+
+/* Indicadores de Comidas */
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.bg-desayuno {
+  background-color: var(--color-desayuno);
+  color: var(--color-desayuno);
+}
+
+.bg-almuerzo {
+  background-color: var(--color-almuerzo);
+  color: var(--color-almuerzo);
+}
+
+.bg-cena {
+  background-color: var(--color-cena);
+  color: var(--color-cena);
+}
+
+.bg-merienda {
+  background-color: var(--color-merienda);
+  color: var(--color-merienda);
+}
+
+/* Inputs de Formulario Modernos */
+.glass-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: var(--text-primary) !important;
+  padding: 0.65rem 1rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.glass-input:focus, .glass-input:active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(99, 102, 241, 0.5);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+select.glass-input option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.focus-none:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Selectores de fecha */
+.date-selector-container {
+  border-radius: 14px;
+}
+
+.date-selector-container input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+/* Botones Premium */
+.btn-warning-custom {
+  background: var(--gradient-warning);
+  color: #0b0c16;
+  border: none;
+  border-radius: 14px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+.btn-warning-custom:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f43f5e 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.5);
+}
+
+.btn-warning-custom:active {
+  transform: translateY(1px);
+}
+
+.btn-glass-icon {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-glass-icon:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Tablas Premium */
+.glass-table-container {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  background: rgba(20, 22, 41, 0.3);
+}
+
+.table {
+  color: var(--text-primary) !important;
+}
+
+.table th {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-muted) !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1rem 1.25rem !important;
+}
+
+.table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding: 1rem 1.25rem !important;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Listado de Logs Diarios en Dashboard */
+.list-group-item {
+  color: var(--text-primary) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  padding: 0.85rem 0.5rem;
+  transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Celdas editables en tabla de resultados */
+.editable-cell {
+  outline: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.editable-cell:focus {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.5);
+}
+
+/* Controladores del SPA (Visibilidad de Vistas) */
+.spa-view {
+  display: none;
+  opacity: 0;
+  transform: translateY(15px);
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.spa-view.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Grupo de botones del Gráfico */
+.glass-btn-group {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-btn-group button {
+  color: var(--text-muted);
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.glass-btn-group button.btn-glass-active {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Contenedor de estadísticas rápidas */
+.stat-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s ease;
+}
+
+.stat-box:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.status-banner {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+/* Animaciones */
+.animate-pulse {
+  animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+/* Modales Glassmorphism */
+.modal-content.glass-card {
+  background: rgba(19, 21, 38, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+}
+
+/* Personalización del Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Botón de Acción Flotante (FAB) Sticky */
+.fab-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--gradient-warning);
+  color: #0b0c16 !important;
+  padding: 0.8rem 1.6rem;
+  border-radius: 50px;
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.45);
+  z-index: 1040;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              box-shadow 0.3s ease, 
+              background 0.3s ease;
+}
+
+.fab-btn:hover {
+  transform: scale(1.05) translateY(-3px);
+  box-shadow: 0 12px 40px rgba(245, 158, 11, 0.6);
+  background: linear-gradient(135deg, #fbbf24 0%, #f43f5e 100%);
+  color: #0b0c16 !important;
+}
+
+.fab-btn:active {
+  transform: scale(0.95) translateY(0);
+}
+
+.fab-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+}
+
+.fab-btn:hover .fab-icon {
+  transform: rotate(90deg);
+}
+
+/* En dispositivos móviles pequeños se puede simplificar solo a un icono para ahorrar espacio */
+@media (max-width: 576px) {
+  .fab-btn {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.85rem;
+    border-radius: 50%;
+  }
+  .fab-text {
+    display: none;
+  }
+}
+
