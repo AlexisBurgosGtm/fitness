@@ -410,9 +410,9 @@ function renderTempResultsTable() {
     totalKcal += kcal;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><div contenteditable="true" class="editable-cell text-white" data-index="${index}" data-field="alimento">${item.alimento || ''}</div></td>
-      <td><div contenteditable="true" class="editable-cell text-muted-custom" data-index="${index}" data-field="porcion">${item.porcion || '1 porción'}</div></td>
-      <td><div contenteditable="true" class="editable-cell fw-semibold text-warning" data-index="${index}" data-field="calorias">${kcal}</div></td>`;
+      <td data-label="Alimento"><div contenteditable="true" class="editable-cell text-white" data-index="${index}" data-field="alimento">${item.alimento || ''}</div></td>
+      <td data-label="Porción Estimada"><div contenteditable="true" class="editable-cell text-muted-custom" data-index="${index}" data-field="porcion">${item.porcion || '1 porción'}</div></td>
+      <td data-label="Calorías (kcal)"><div contenteditable="true" class="editable-cell fw-semibold text-warning" data-index="${index}" data-field="calorias">${kcal}</div></td>`;
     tbody.appendChild(tr);
   });
 
@@ -513,12 +513,12 @@ async function loadHistorial() {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="text-white fs-7">${item.fecha}</td>
-        <td><span class="badge ${mealBadgeClass} text-uppercase fs-8" style="font-weight:600">${item.comida}</span></td>
-        <td class="fw-semibold text-white fs-7">${item.alimento}</td>
-        <td class="text-muted-custom fs-7">${item.porcion}</td>
-        <td><span class="badge bg-dark border border-secondary text-warning fs-7">${item.calorias} kcal</span></td>
-        <td class="text-center">
+        <td data-label="Fecha" class="text-white fs-7">${item.fecha}</td>
+        <td data-label="Comida"><span class="badge ${mealBadgeClass} text-uppercase fs-8" style="font-weight:600">${item.comida}</span></td>
+        <td data-label="Alimento" class="fw-semibold text-white fs-7">${item.alimento}</td>
+        <td data-label="Porción" class="text-muted-custom fs-7">${item.porcion}</td>
+        <td data-label="Calorías"><span class="badge bg-dark border border-secondary text-warning fs-7">${item.calorias} kcal</span></td>
+        <td data-label="Acciones" class="text-center">
           <button class="btn btn-glass-icon btn-sm px-2 text-danger" onclick="deleteHistoryItem(${item.id})" title="Eliminar registro">
             <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
           </button>
