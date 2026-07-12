@@ -122,26 +122,58 @@ function showAlert(message, type = 'info') {
 }
 
 // 4. SPA ROUTER
+function openMenu() {
+  document.getElementById('side-menu').classList.add('open');
+  document.getElementById('menu-overlay').classList.add('active');
+}
+
+function closeMenu() {
+  document.getElementById('side-menu').classList.remove('open');
+  document.getElementById('menu-overlay').classList.remove('active');
+}
+
+function showView(viewId) {
+  const views = document.querySelectorAll('.spa-view');
+  const targetView = document.getElementById(`view-${viewId}`);
+  const currentView = document.querySelector('.spa-view.active');
+  if (!targetView || targetView === currentView) return;
+
+  if (currentView) {
+    currentView.classList.add('view-exit');
+    currentView.addEventListener('transitionend', function cleanup() {
+      currentView.classList.remove('active', 'view-exit');
+      currentView.style.display = 'none';
+      currentView.removeEventListener('transitionend', cleanup);
+    }, { once: true });
+  }
+
+  targetView.style.display = 'block';
+  targetView.classList.remove('view-exit');
+  targetView.classList.add('view-enter');
+  requestAnimationFrame(() => {
+    targetView.classList.add('active');
+    targetView.classList.remove('view-enter');
+  });
+}
+
 function initRouter() {
-  const navLinks = document.querySelectorAll('.navbar-nav .nav-link, #dash-lnk-add');
+  const navLinks = document.querySelectorAll('.navbar-nav .nav-link, .menu-link, #dash-lnk-add');
   const views = document.querySelectorAll('.spa-view');
 
   function handleRoute(hash) {
     const targetId = hash || '#dashboard';
     const cleanId = targetId.substring(1);
 
-    let matched = false;
-    views.forEach(view => {
-      if (view.id === `view-${cleanId}`) { view.classList.add('active'); matched = true; }
-      else view.classList.remove('active');
-    });
-
     navLinks.forEach(link => {
       if (link.getAttribute('href') === targetId) link.classList.add('active');
       else link.classList.remove('active');
     });
 
-    if (matched) triggerViewLoad(cleanId);
+    showView(cleanId);
+    closeMenu();
+    if (cleanId === 'dashboard') loadDashboard();
+    else if (cleanId === 'historial') loadHistorial();
+    else if (cleanId === 'agregar') resetQueryForm();
   }
 
   window.addEventListener('hashchange', () => handleRoute(window.location.hash));
@@ -205,10 +237,10 @@ async function loadDashboard() {
       progressBar.classList.add('bg-gradient-warning');
     }
 
-    // Estadísticas generales desde MySQL
-    const stats = await API.getStats();
-    document.getElementById('dash-stat-total-logs').textContent   = stats.totalLogs  || 0;
-    document.getElementById('dash-stat-active-days').textContent  = stats.activeDays || 0;
+    const remaining = Math.max(target - totalConsumed, 0);
+    document.getElementById('dash-remaining-calories').textContent = remaining > 0
+      ? `Faltan ${remaining} kcal para la meta.`
+      : '¡Has alcanzado tu meta diaria!';
 
     renderTodayLogsList(items);
     await updateWeeklyChart();
@@ -514,7 +546,7 @@ async function loadHistorial() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td data-label="Fecha" class="text-white fs-7">${item.fecha}</td>
-        <td data-label="Comida"><span class="badge ${mealBadgeClass} text-uppercase fs-8" style="font-weight:600">${item.comida}</span></td>
+        <td data-label="Comida"><span class="badge ${mealBadgeClass} text-white text-uppercase fs-8" style="font-weight:600">${item.comida}</span></td>
         <td data-label="Alimento" class="fw-semibold text-white fs-7">${item.alimento}</td>
         <td data-label="Porción" class="text-muted-custom fs-7">${item.porcion}</td>
         <td data-label="Calorías"><span class="badge bg-dark border border-secondary text-warning fs-7">${item.calorias} kcal</span></td>
@@ -607,4 +639,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-delete-all-db').addEventListener('click', deleteAllHistory);
+
+  const menuToggle = document.getElementById('menu-toggle');
+  const menuClose = document.getElementById('menu-close');
+  const menuOverlay = document.getElementById('menu-overlay');
+  if (menuToggle) menuToggle.addEventListener('click', () => openMenu());
+  if (menuClose) menuClose.addEventListener('click', () => closeMenu());
+  if (menuOverlay) menuOverlay.addEventListener('click', () => closeMenu());
 });
