@@ -195,6 +195,125 @@ app.get('/api/weekly', async (req, res) => {
   }
 });
 
+// ─── ENDPOINTS: CONSULTAS GEMINI (RECUPERACIÓN) ──────────────────────────────
+
+// POST /api/gemini-queries — Guardar una consulta pendiente a Gemini
+app.post('/api/gemini-queries', async (req, res) => {
+  const { query_text, gemini_response, status, error_message } = req.body;
+
+  if (!query_text || query_text.trim() === '') {
+    return res.status(400).json({ error: 'El texto de consulta no puede estar vacío.' });
+  }
+
+  try {
+    const queryId = await db.saveGeminiQuery({
+      query_text,
+      gemini_response,
+      status: status || 'pendiente',
+      error_message
+    });
+    res.status(201).json({ success: true, id: queryId, message: 'Consulta guardada para recuperación posterior.' });
+  } catch (error) {
+    console.error('❌ Error guardando consulta Gemini:', error);
+    res.status(500).json({ error: 'Error al guardar la consulta.', details: error.message });
+  }
+});
+
+// GET /api/gemini-queries/pending — Obtener todas las consultas pendientes
+app.get('/api/gemini-queries/pending', async (req, res) => {
+  try {
+    const queries = await db.getPendingGeminiQueries();
+    res.json({ data: queries });
+  } catch (error) {
+    console.error('❌ Error obteniendo consultas pendientes:', error);
+    res.status(500).json({ error: 'Error al obtener consultas pendientes.', details: error.message });
+  }
+});
+
+// GET /api/gemini-queries/status/:status — Obtener consultas por estado
+app.get('/api/gemini-queries/status/:status', async (req, res) => {
+  const { status } = req.params;
+  const validStatuses = ['pendiente', 'completado', 'error'];
+
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Estado inválido. Debe ser: pendiente, completado o error.' });
+  }
+
+  try {
+    const queries = await db.getGeminiQueriesByStatus(status);
+    res.json({ data: queries });
+  } catch (error) {
+    console.error('❌ Error obteniendo consultas por estado:', error);
+    res.status(500).json({ error: 'Error al obtener las consultas.', details: error.message });
+  }
+});
+
+// GET /api/gemini-queries/:id — Obtener una consulta específica
+app.get('/api/gemini-queries/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  try {
+    const query = await db.getGeminiQuery(Number(id));
+    if (!query) {
+      return res.status(404).json({ error: 'Consulta no encontrada.' });
+    }
+    res.json({ data: query });
+  } catch (error) {
+    console.error('❌ Error obteniendo consulta:', error);
+    res.status(500).json({ error: 'Error al obtener la consulta.', details: error.message });
+  }
+});
+
+// PUT /api/gemini-queries/:id — Actualizar una consulta (marcar como completada, agregar respuesta, etc.)
+app.put('/api/gemini-queries/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, gemini_response, error_message } = req.body;
+
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  try {
+    await db.updateGeminiQuery(Number(id), { status, gemini_response, error_message });
+    res.json({ success: true, message: 'Consulta actualizada.' });
+  } catch (error) {
+    console.error('❌ Error actualizando consulta:', error);
+    res.status(500).json({ error: 'Error al actualizar la consulta.', details: error.message });
+  }
+});
+
+// DELETE /api/gemini-queries/:id — Eliminar una consulta específica
+app.delete('/api/gemini-queries/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  try {
+    await db.deleteGeminiQuery(Number(id));
+    res.json({ success: true, message: 'Consulta eliminada.' });
+  } catch (error) {
+    console.error('❌ Error eliminando consulta:', error);
+    res.status(500).json({ error: 'Error al eliminar la consulta.', details: error.message });
+  }
+});
+
+// DELETE /api/gemini-queries/completed/all — Limpiar todas las consultas completadas
+app.delete('/api/gemini-queries/completed/all', async (req, res) => {
+  try {
+    await db.clearCompletedGeminiQueries();
+    res.json({ success: true, message: 'Consultas completadas eliminadas.' });
+  } catch (error) {
+    console.error('❌ Error limpiando consultas completadas:', error);
+    res.status(500).json({ error: 'Error al limpiar consultas.', details: error.message });
+  }
+});
+
 // ─── MOCK FALLBACK ────────────────────────────────────────────────────────────
 
 function generateMockNutrition(query) {

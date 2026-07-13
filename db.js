@@ -38,6 +38,21 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Tabla para consultas pendientes a Gemini (recuperación ante fallos del servicio)
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS consultas_gemini (
+        id                INT AUTO_INCREMENT PRIMARY KEY,
+        query_text        TEXT NOT NULL COMMENT 'Texto original de la consulta del usuario',
+        gemini_response   JSON COMMENT 'Respuesta de Gemini en formato JSON (array de objetos)',
+        status            ENUM('pendiente','completado','error') NOT NULL DEFAULT 'pendiente' COMMENT 'Estado de la consulta',
+        error_message     VARCHAR(500) COMMENT 'Mensaje de error si la consulta falló',
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_status (status),
+        INDEX idx_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     console.log('✅ Tablas MySQL verificadas/creadas correctamente.');
   } finally {
     conn.release();
@@ -151,6 +166,116 @@ async function getStats() {
   };
 }
 
+// ─── CRUD de Consultas Gemini ────────────────────────────────────────────────
+
+/**
+ * Guardar una consulta pendiente a Gemini.
+ * @param {{ query_text, gemini_response?, status?, error_message? }} data
+ * @returns {Promise<number>} ID de la consulta insertada
+ */
+async function saveGeminiQuery(data) {
+  const [result] = await pool.execute(
+    `INSERT INTO consultas_gemini (query_text, gemini_response, status, error_message)
+     VALUES (?, ?, ?, ?)`,
+    [
+      data.query_text,
+      data.gemini_response ? JSON.stringify(data.gemini_response) : null,
+      data.status || 'pendiente',
+      data.error_message || null
+    ]
+  );
+  return result.insertId;
+}
+
+/**
+ * Obtener todas las consultas pendientes (para recuperación ante fallos).
+ * @returns {Promise<Array>}
+ */
+async function getPendingGeminiQueries() {
+  const [rows] = await pool.execute(
+    `SELECT id, query_text, gemini_response, created_at 
+     FROM consultas_gemini 
+     WHERE status = 'pendiente' 
+     ORDER BY created_at DESC`
+  );
+  return rows.map(row => ({
+    ...row,
+    gemini_response: row.gemini_response ? JSON.parse(row.gemini_response) : null
+  }));
+}
+
+/**
+ * Obtener todas las consultas con filtro de estado.
+ * @param {string} status - 'pendiente', 'completado', 'error'
+ * @returns {Promise<Array>}
+ */
+async function getGeminiQueriesByStatus(status) {
+  const [rows] = await pool.execute(
+    `SELECT id, query_text, gemini_response, status, error_message, created_at 
+     FROM consultas_gemini 
+     WHERE status = ? 
+     ORDER BY created_at DESC`,
+    [status]
+  );
+  return rows.map(row => ({
+    ...row,
+    gemini_response: row.gemini_response ? JSON.parse(row.gemini_response) : null
+  }));
+}
+
+/**
+ * Obtener una consulta específica por ID.
+ * @param {number} id
+ * @returns {Promise<Object|null>}
+ */
+async function getGeminiQuery(id) {
+  const [rows] = await pool.execute(
+    `SELECT id, query_text, gemini_response, status, error_message, created_at 
+     FROM consultas_gemini WHERE id = ?`,
+    [id]
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  return {
+    ...row,
+    gemini_response: row.gemini_response ? JSON.parse(row.gemini_response) : null
+  };
+}
+
+/**
+ * Actualizar estado y respuesta de una consulta Gemini.
+ * @param {number} id
+ * @param {{ status, gemini_response?, error_message? }} data
+ */
+async function updateGeminiQuery(id, data) {
+  await pool.execute(
+    `UPDATE consultas_gemini 
+     SET status = ?, gemini_response = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [
+      data.status,
+      data.gemini_response ? JSON.stringify(data.gemini_response) : null,
+      data.error_message || null,
+      id
+    ]
+  );
+}
+
+/**
+ * Eliminar una consulta Gemini por ID.
+ * @param {number} id
+ */
+async function deleteGeminiQuery(id) {
+  await pool.execute('DELETE FROM consultas_gemini WHERE id = ?', [id]);
+}
+
+/**
+ * Eliminar todas las consultas completadas (limpieza).
+ */
+async function clearCompletedGeminiQueries() {
+  await pool.execute("DELETE FROM consultas_gemini WHERE status = 'completado'");
+}
+
 module.exports = {
   pool,
   initDatabase,
@@ -160,5 +285,12 @@ module.exports = {
   deleteFood,
   clearAll,
   getCaloriesSummaryByDates,
-  getStats
+  getStats,
+  saveGeminiQuery,
+  getPendingGeminiQueries,
+  getGeminiQueriesByStatus,
+  getGeminiQuery,
+  updateGeminiQuery,
+  deleteGeminiQuery,
+  clearCompletedGeminiQueries
 };

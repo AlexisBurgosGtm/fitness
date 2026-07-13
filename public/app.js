@@ -15,6 +15,15 @@ const API = {
     return res.json();
   },
 
+  async put(url, body) {
+    const res = await fetch(this.BASE + url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return res.json();
+  },
+
   async get(url) {
     const res = await fetch(this.BASE + url);
     return res.json();
@@ -28,6 +37,36 @@ const API = {
   // Gemini: consultar calorías de alimentos
   consultarNutricion(query) {
     return this.post('/api/nutrition', { query });
+  },
+
+  // Gemini: guardar consulta pendiente (recuperación ante fallos)
+  guardarConsultaGemini(query_text, gemini_response = null, status = 'pendiente', error_message = null) {
+    return this.post('/api/gemini-queries', { query_text, gemini_response, status, error_message });
+  },
+
+  // Gemini: obtener todas las consultas pendientes
+  obtenerConsultasPendientes() {
+    return this.get('/api/gemini-queries/pending');
+  },
+
+  // Gemini: obtener consultas por estado
+  obtenerConsultasPorEstado(status) {
+    return this.get(`/api/gemini-queries/status/${status}`);
+  },
+
+  // Gemini: obtener una consulta específica
+  obtenerConsultaGemini(id) {
+    return this.get(`/api/gemini-queries/${id}`);
+  },
+
+  // Gemini: actualizar una consulta (marcar como completada, etc.)
+  actualizarConsultaGemini(id, status, gemini_response = null, error_message = null) {
+    return this.put(`/api/gemini-queries/${id}`, { status, gemini_response, error_message });
+  },
+
+  // Gemini: eliminar una consulta
+  eliminarConsultaGemini(id) {
+    return this.delete(`/api/gemini-queries/${id}`);
   },
 
   // Guardar lista de alimentos en MySQL
@@ -74,6 +113,7 @@ const API = {
 let caloriesChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
+let currentGeminiQueryId = null; // ID de la consulta Gemini actual
 
 // Obtener fecha actual en formato local YYYY-MM-DD
 function getLocalDateString(date = new Date()) {
@@ -407,6 +447,8 @@ function resetQueryForm() {
   document.getElementById('gemini-results-container').classList.add('d-none');
   document.getElementById('gemini-loading').classList.add('d-none');
   tempAnalysisResults = [];
+  currentGeminiQueryId = null;
+  loadPendingGeminiQueries(); // Mostrar consultas pendientes
 }
 
 async function handleGeminiQuery(e) {
@@ -428,9 +470,22 @@ async function handleGeminiQuery(e) {
   try {
     const result = await API.consultarNutricion(queryText);
 
-    if (!result || !result.data) throw new Error(result.error || 'Respuesta inválida del servidor.');
+    if (!result || !result.data) {
+      // Si hay error, guardar la consulta como pendiente con error
+      await guardarConsultaGeminiLocal(queryText, null, 'error', result.error || 'Respuesta inválida');
+      throw new Error(result.error || 'Respuesta inválida del servidor.');
+    }
 
     tempAnalysisResults = result.data;
+
+    // Guardar la consulta exitosa en la BD
+    const saveResult = await API.guardarConsultaGemini(
+      queryText,
+      result.data,
+      'completado',
+      null
+    );
+    currentGeminiQueryId = saveResult.id;
 
     const sourceBadge = document.getElementById('gemini-source-badge');
     if (result.isMock) {
@@ -446,10 +501,21 @@ async function handleGeminiQuery(e) {
     renderTempResultsTable();
   } catch (error) {
     console.error('Error consultando backend:', error);
-    showAlert(`Error: ${error.message}. Inténtalo de nuevo más tarde.`, 'danger');
+    showAlert(`Error: ${error.message}. Inténtalo de nuevo más tarde. La consulta se guardó para recuperación.`, 'danger');
   } finally {
     loadingDiv.classList.add('d-none');
     submitBtn.disabled = false;
+  }
+}
+
+// Función auxiliar para guardar consulta con error
+async function guardarConsultaGeminiLocal(queryText, gemini_response, status, error_message) {
+  try {
+    const result = await API.guardarConsultaGemini(queryText, gemini_response, status, error_message);
+    currentGeminiQueryId = result.id;
+    console.log(`✅ Consulta guardada para recuperación (ID: ${result.id})`);
+  } catch (error) {
+    console.error('Error guardando consulta para recuperación:', error);
   }
 }
 
@@ -533,6 +599,80 @@ async function saveResultsToDB() {
     showAlert('Error al guardar en la base de datos: ' + error.message, 'danger');
   } finally {
     saveBtn.disabled = false;
+  }
+}
+
+// Cargar y mostrar consultas pendientes a Gemini
+async function loadPendingGeminiQueries() {
+  try {
+    const result = await API.obtenerConsultasPendientes();
+    const queries = result.data || [];
+    const containerHtml = document.getElementById('pending-queries-container');
+    
+    if (!containerHtml) return; // Si el contenedor no existe, no hacer nada
+
+    if (queries.length === 0) {
+      containerHtml.innerHTML = '';
+      return;
+    }
+
+    let html = `
+      <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+        <i data-lucide="alert-circle" class="me-2"></i>
+        <strong>Consultas Pendientes:</strong> Tienes ${queries.length} consulta(s) anterior(es) que puedes recuperar si Gemini no respondió correctamente.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="mt-2">`;
+    
+    queries.forEach(query => {
+      html += `
+        <div class="btn-group d-block mt-2 w-100" role="group">
+          <small class="d-block mb-2 text-muted">${new Date(query.created_at).toLocaleString()}</small>
+          <p class="mb-2 text-break">"${query.query_text.substring(0, 100)}${query.query_text.length > 100 ? '...' : ''}"</p>
+          <button type="button" class="btn btn-sm btn-outline-info" onclick="reusePendingQuery(${query.id})">
+            <i data-lucide="refresh-cw" style="width:14px;height:14px;" class="me-1"></i> Reutilizar Consulta
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePendingQuery(${query.id})">
+            <i data-lucide="trash-2" style="width:14px;height:14px;" class="me-1"></i> Eliminar
+          </button>
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
+    containerHtml.innerHTML = html;
+    lucide.createIcons();
+  } catch (error) {
+    console.error('Error cargando consultas pendientes:', error);
+  }
+}
+
+// Reutilizar una consulta pendiente (restaurar texto en formulario)
+async function reusePendingQuery(queryId) {
+  try {
+    const result = await API.obtenerConsultaGemini(queryId);
+    const query = result.data;
+
+    if (query && query.query_text) {
+      document.getElementById('form-query').value = query.query_text;
+      showAlert('Consulta recuperada. Ahora puedes intentar consultar a Gemini nuevamente.', 'info');
+    }
+  } catch (error) {
+    console.error('Error recuperando consulta:', error);
+    showAlert('Error al recuperar la consulta.', 'danger');
+  }
+}
+
+// Eliminar una consulta pendiente
+async function deletePendingQuery(queryId) {
+  if (!confirm('¿Estás seguro de que deseas eliminar esta consulta pendiente?')) return;
+
+  try {
+    await API.eliminarConsultaGemini(queryId);
+    showAlert('Consulta pendiente eliminada.', 'success');
+    loadPendingGeminiQueries(); // Recargar lista
+  } catch (error) {
+    console.error('Error eliminando consulta:', error);
+    showAlert('Error al eliminar la consulta.', 'danger');
   }
 }
 
