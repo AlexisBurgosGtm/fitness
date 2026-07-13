@@ -222,6 +222,7 @@ async function loadDashboard() {
     const percentage = target > 0 ? Math.min(Math.round((totalConsumed / target) * 100), 100) : 0;
     const progressPct = target > 0 ? Math.round((totalConsumed / target) * 100) : 0;
     document.getElementById('dash-percentage-val').textContent = `${progressPct}%`;
+    updateDashboardProgressColor(progressPct);
 
     const progressBar = document.getElementById('dash-progress-bar');
     progressBar.style.width = `${percentage}%`;
@@ -252,6 +253,34 @@ async function loadDashboard() {
 }
 
 // Renderizar la lista de consumos del día
+function updateDashboardProgressColor(progressPct) {
+  const percentageLabel = document.getElementById('dash-percentage-val');
+  const largeLabel = document.getElementById('dash-progress-large');
+  if (!largeLabel) return;
+
+  if (percentageLabel) {
+    percentageLabel.classList.remove('text-success', 'text-warning', 'text-danger');
+  }
+  largeLabel.classList.remove('text-success', 'text-warning', 'text-danger');
+  largeLabel.style.color = '';
+
+  if (progressPct > 90) {
+    largeLabel.classList.add('text-danger');
+    if (percentageLabel) percentageLabel.classList.add('text-danger');
+    largeLabel.style.color = '#ef4444';
+  } else if (progressPct > 80) {
+    largeLabel.classList.add('text-warning');
+    if (percentageLabel) percentageLabel.classList.add('text-warning');
+    largeLabel.style.color = '#f59e0b';
+  } else {
+    largeLabel.classList.add('text-success');
+    if (percentageLabel) percentageLabel.classList.add('text-success');
+    largeLabel.style.color = '#22c55e';
+  }
+
+  largeLabel.textContent = `${progressPct}%`;
+}
+
 function renderTodayLogsList(items) {
   const container = document.getElementById('today-logs-list');
   container.innerHTML = '';

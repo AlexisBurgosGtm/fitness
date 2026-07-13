@@ -1,9 +1,10 @@
-const CACHE_NAME = 'alexis-cal-cache-v2';
+const CACHE_NAME = 'alexis-cal-cache-v7';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
+  '/sw.js',
   '/manifest.webmanifest',
   '/icons/icon-72.png',
   '/icons/icon-96.png',
