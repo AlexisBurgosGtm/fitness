@@ -132,6 +132,34 @@ let bootstrapTargetModal = null;
 let currentGeminiQueryId = null; // ID de la consulta Gemini actual
 let manualFoodItems = [];
 
+function renderManualResultsTable() {
+  const tbody = document.getElementById('manual-results-tbody');
+  const totalBadge = document.getElementById('manual-total-temp');
+  if (!tbody || !totalBadge) return;
+
+  tbody.innerHTML = '';
+
+  if (!manualFoodItems || manualFoodItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted-custom py-4">Aún no agregaste alimentos manuales.</td></tr>';
+    totalBadge.textContent = 'Total: 0 kcal';
+    return;
+  }
+
+  let totalKcal = 0;
+  manualFoodItems.forEach((item, index) => {
+    const kcal = Math.round(Number(item.calorias || 0));
+    totalKcal += kcal;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td data-label="Alimento" class="text-white">${item.alimento || ''}</td>
+      <td data-label="Porción" class="text-muted-custom">${item.porcion || '1 porción'}</td>
+      <td data-label="Calorías (kcal)" class="fw-semibold text-warning">${kcal} kcal</td>`;
+    tbody.appendChild(tr);
+  });
+
+  totalBadge.textContent = `Total: ${totalKcal} kcal`;
+}
+
 // Obtener fecha actual en formato local YYYY-MM-DD
 function getLocalDateString(date = new Date()) {
   const offset = date.getTimezoneOffset();
@@ -215,7 +243,6 @@ function showView(viewId) {
 
 function initRouter() {
   const navLinks = document.querySelectorAll('.navbar-nav .nav-link, .menu-link, #dash-lnk-add');
-  const views = document.querySelectorAll('.spa-view');
 
   function handleRoute(hash) {
     const targetId = hash || '#dashboard';
@@ -232,6 +259,10 @@ function initRouter() {
     else if (cleanId === 'historial') loadHistorial();
     else if (cleanId === 'medidas') loadMedidas();
     else if (cleanId === 'agregar') resetQueryForm();
+    else if (cleanId === 'manual') {
+      toggleManualFoodForm(true);
+      document.getElementById('manual-food-name')?.focus();
+    }
   }
 
   window.addEventListener('hashchange', () => handleRoute(window.location.hash));
@@ -623,21 +654,25 @@ async function saveResultsToDB() {
 }
 
 function toggleManualFoodForm(show) {
-  const container = document.getElementById('manual-food-form-container');
   const btn = document.getElementById('btn-manual-food');
-  if (!container || !btn) return;
+  if (!btn) return;
 
-  container.classList.toggle('d-none', !show);
   btn.classList.toggle('btn-outline-info', !show);
   btn.classList.toggle('btn-info', show);
   if (show) {
-    document.getElementById('manual-food-name').focus();
+    document.getElementById('manual-food-name')?.focus();
   }
 }
 
-async function addManualFoodToResults() {
+function openManualView() {
+  window.location.hash = '#manual';
+  setTimeout(() => document.getElementById('manual-food-name')?.focus(), 120);
+}
+
+function addManualFoodToResults() {
   const name = document.getElementById('manual-food-name').value.trim();
-  const calories = Number(document.getElementById('manual-food-calories').value);
+  const caloriesValue = document.getElementById('manual-food-calories').value;
+  const calories = Number(caloriesValue);
 
   if (!name) {
     showAlert('Ingresa una descripción del alimento.', 'warning');
@@ -648,11 +683,9 @@ async function addManualFoodToResults() {
     return;
   }
 
-  tempAnalysisResults.push({ alimento: name, calorias: Math.round(calories), porcion: '1 porción manual' });
-  renderTempResultsTable();
-  document.getElementById('manual-food-name').value = '';
-  document.getElementById('manual-food-calories').value = '';
-  toggleManualFoodForm(false);
+  manualFoodItems.push({ alimento: name, calorias: Math.round(calories), porcion: '1 porción manual' });
+  renderManualResultsTable();
+  document.getElementById('manual-food-form').reset();
   showAlert('Alimento manual agregado. Puedes guardarlo cuando quieras.', 'success');
 }
 
@@ -974,8 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (manualFab) {
     manualFab.addEventListener('click', e => {
       e.preventDefault();
-      window.location.hash = '#agregar';
-      toggleManualFoodForm(true);
+      openManualView();
     });
   }
   document.getElementById('btn-cancel-results').addEventListener('click', () => {
@@ -983,9 +1015,12 @@ document.addEventListener('DOMContentLoaded', () => {
     showAlert('Análisis descartado.', 'info');
   });
   document.getElementById('btn-save-results').addEventListener('click', saveResultsToDB);
-  document.getElementById('btn-manual-food').addEventListener('click', () => toggleManualFoodForm(true));
-  document.getElementById('btn-close-manual-food').addEventListener('click', () => toggleManualFoodForm(false));
-  document.getElementById('btn-add-manual-food').addEventListener('click', addManualFoodToResults);
+  document.getElementById('btn-manual-food').addEventListener('click', () => openManualView());
+  document.getElementById('btn-back-to-gemini').addEventListener('click', () => window.location.hash = '#agregar');
+  document.getElementById('manual-food-form').addEventListener('submit', e => {
+    e.preventDefault();
+    addManualFoodToResults();
+  });
   document.getElementById('btn-save-measure').addEventListener('click', saveMeasurement);
 
   document.getElementById('filter-meal-type').addEventListener('change', loadHistorial);

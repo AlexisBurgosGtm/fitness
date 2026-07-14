@@ -266,7 +266,7 @@
               <!-- Botón Consultar -->
               <div class="text-end d-flex justify-content-end gap-2 flex-wrap">
                 <button type="button" class="btn btn-outline-info px-4 py-2 d-inline-flex align-items-center" id="btn-manual-food">
-                  <i data-lucide="plus" class="me-2"></i> Agregar alimento manual
+                  <i data-lucide="plus-circle" class="me-2"></i> Abrir vista manual
                 </button>
                 <button type="submit" class="btn btn-warning-custom px-4 py-2 d-inline-flex align-items-center" id="btn-submit-query">
                   <i data-lucide="sparkles" class="me-2"></i> Consultar a Gemini
@@ -327,28 +327,66 @@
               </div>
             </div>
 
-            <div id="manual-food-form-container" class="mt-4 d-none">
-              <div class="border border-info rounded-3 p-3 bg-dark bg-opacity-25">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <h5 class="section-title m-0">Agregar alimento manualmente</h5>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-close-manual-food">Cerrar</button>
-                </div>
-                <div class="row g-3">
-                  <div class="col-md-7">
-                    <label for="manual-food-name" class="form-label text-muted-custom">Descripción del alimento</label>
-                    <input type="text" class="form-control glass-input text-white" id="manual-food-name" placeholder="Ej. Yogur con avena">
-                  </div>
-                  <div class="col-md-3">
-                    <label for="manual-food-calories" class="form-label text-muted-custom">Calorías</label>
-                    <input type="number" min="0" step="1" class="form-control glass-input text-white" id="manual-food-calories" placeholder="120">
-                  </div>
-                  <div class="col-md-2 d-flex align-items-end">
-                    <button type="button" class="btn btn-info w-100" id="btn-add-manual-food">Agregar</button>
-                  </div>
-                </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: ALIMENTO MANUAL -->
+    <section id="view-manual" class="spa-view">
+      <div class="row justify-content-center">
+        <div class="col-lg-8 col-12">
+          <div class="glass-card p-4 md-p-5">
+            <div class="d-flex align-items-center mb-4">
+              <div class="icon-box bg-warning-glow me-3">
+                <i data-lucide="plus-circle" class="text-warning"></i>
+              </div>
+              <div>
+                <h2 class="section-title m-0">Agregar alimento manual</h2>
+                <p class="text-muted-custom m-0">Registra un alimento simple y agrégalo a la lista de resultados para guardarlo después.</p>
               </div>
             </div>
 
+            <form id="manual-food-form" class="needs-validation" novalidate>
+              <div class="row g-3">
+                <div class="col-md-7">
+                  <label for="manual-food-name" class="form-label text-muted-custom">Descripción del alimento</label>
+                  <input type="text" class="form-control glass-input text-white" id="manual-food-name" placeholder="Ej. Yogur con avena" required>
+                </div>
+                <div class="col-md-3">
+                  <label for="manual-food-calories" class="form-label text-muted-custom">Calorías</label>
+                  <input type="number" min="0" step="1" class="form-control glass-input text-white" id="manual-food-calories" placeholder="120" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                  <button type="submit" class="btn btn-warning-custom w-100" id="btn-add-manual-food">Agregar</button>
+                </div>
+              </div>
+            </form>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+              <button type="button" class="btn btn-outline-secondary px-4" id="btn-back-to-gemini">Volver a Gemini</button>
+            </div>
+
+            <div class="mt-4 border-top border-secondary pt-4">
+              <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                <h4 class="section-title m-0">Lista provisional</h4>
+                <span class="badge bg-warning text-dark fs-7 px-3 py-2" id="manual-total-temp">Total: 0 kcal</span>
+              </div>
+              <div class="table-responsive glass-table-container rounded-3">
+                <table class="table table-dark table-hover m-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col" style="width: 50%">Alimento</th>
+                      <th scope="col" style="width: 25%">Porción</th>
+                      <th scope="col" style="width: 25%">Calorías (kcal)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="manual-results-tbody">
+                    <tr><td colspan="3" class="text-center text-muted-custom py-4">Aún no agregaste alimentos manuales.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -513,13 +551,12 @@
   </div>
 
   <!-- Botones de Acción Flotante (FAB) Sticky -->
-  <a href="#agregar" class="fab-btn" id="fab-agregar" title="Agregar alimento">
+  <a href="#agregar" class="fab-btn" id="fab-agregar" aria-label="Agregar alimento">
     <i data-lucide="plus" class="fab-icon"></i>
     <span class="fab-text">Agregar alimento</span>
   </a>
-  <a href="#agregar" class="fab-btn fab-btn-secondary" id="fab-manual" title="Agregar alimento manual">
+  <a href="#manual" class="fab-btn fab-btn-secondary" id="fab-manual" aria-label="Agregar alimento manual">
     <i data-lucide="plus" class="fab-icon"></i>
-    <span class="fab-text">Manual</span>
   </a>
 
   <footer class="container text-center py-4 text-muted-custom border-top border-secondary mt-5 fs-8">
