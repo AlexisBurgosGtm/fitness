@@ -43,13 +43,26 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS consultas_gemini (
         id                INT AUTO_INCREMENT PRIMARY KEY,
         query_text        TEXT NOT NULL COMMENT 'Texto original de la consulta del usuario',
-        gemini_response   JSON COMMENT 'Respuesta de Gemini en formato JSON (array de objetos)',
+        gemini_response   LONGTEXT COMMENT 'Respuesta de Gemini en formato JSON (array de objetos)',
         status            ENUM('pendiente','completado','error') NOT NULL DEFAULT 'pendiente' COMMENT 'Estado de la consulta',
         error_message     VARCHAR(500) COMMENT 'Mensaje de error si la consulta falló',
         created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_status (status),
         INDEX idx_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Tabla para registrar medidas corporales en centímetros por fecha
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS medidas (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        fecha       DATE NOT NULL,
+        item        VARCHAR(50) NOT NULL,
+        valor       DECIMAL(10,2) NOT NULL DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_fecha_medida (fecha),
+        INDEX idx_item_medida (item)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
@@ -125,6 +138,38 @@ async function deleteFood(id) {
  */
 async function clearAll() {
   await pool.execute('DELETE FROM comidas');
+}
+
+/**
+ * Insertar una medida corporal registrada.
+ * @param {{ fecha, item, valor }} item
+ * @returns {Promise<number>} ID del registro insertado
+ */
+async function addMeasurement(item) {
+  const [result] = await pool.execute(
+    'INSERT INTO medidas (fecha, item, valor) VALUES (?, ?, ?)',
+    [item.fecha, item.item, Number(item.valor || 0)]
+  );
+  return result.insertId;
+}
+
+/**
+ * Obtener todas las medidas registradas, ordenadas por fecha.
+ * @returns {Promise<Array>}
+ */
+async function getMeasurements() {
+  const [rows] = await pool.execute(
+    'SELECT * FROM medidas ORDER BY fecha ASC, id ASC'
+  );
+  return rows;
+}
+
+/**
+ * Eliminar una medida por ID.
+ * @param {number} id
+ */
+async function deleteMeasurement(id) {
+  await pool.execute('DELETE FROM medidas WHERE id = ?', [id]);
 }
 
 /**
@@ -284,6 +329,9 @@ module.exports = {
   getAllFood,
   deleteFood,
   clearAll,
+  addMeasurement,
+  getMeasurements,
+  deleteMeasurement,
   getCaloriesSummaryByDates,
   getStats,
   saveGeminiQuery,

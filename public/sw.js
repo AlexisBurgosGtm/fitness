@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alexis-cal-cache-v8';
+const CACHE_NAME = 'alexis-cal-cache-v10';
 const ASSETS = [
   '/',
   '/index.html',
@@ -34,8 +34,21 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request)
-      .then(cacheResponse => cacheResponse || fetch(event.request))
+    caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
+      const fetchAndCache = fetch(event.request)
+        .then(response => {
+          if (response && response.ok && event.request.url.startsWith(self.location.origin)) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => cachedResponse);
+
+      return cachedResponse || fetchAndCache;
+    })
   );
 });

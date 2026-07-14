@@ -179,6 +179,50 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+// POST /api/medidas — Guardar una medida corporal manualmente
+app.post('/api/medidas', async (req, res) => {
+  const { fecha, item, valor } = req.body;
+
+  if (!fecha || !item || valor === undefined || valor === null || isNaN(Number(valor))) {
+    return res.status(400).json({ error: 'Se requiere fecha, item y valor numérico.' });
+  }
+
+  try {
+    const id = await db.addMeasurement({ fecha, item, valor: Number(valor) });
+    res.status(201).json({ success: true, id });
+  } catch (error) {
+    console.error('❌ Error guardando medida:', error);
+    res.status(500).json({ error: 'Error al guardar la medida.', details: error.message });
+  }
+});
+
+// GET /api/medidas — Obtener todas las medidas registradas
+app.get('/api/medidas', async (req, res) => {
+  try {
+    const medidas = await db.getMeasurements();
+    res.json({ data: medidas });
+  } catch (error) {
+    console.error('❌ Error obteniendo medidas:', error);
+    res.status(500).json({ error: 'Error al obtener las medidas.', details: error.message });
+  }
+});
+
+// DELETE /api/medidas/:id — Eliminar una medida específica
+app.delete('/api/medidas/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  try {
+    await db.deleteMeasurement(Number(id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error eliminando medida:', error);
+    res.status(500).json({ error: 'Error al eliminar la medida.', details: error.message });
+  }
+});
+
 // GET /api/weekly?dates=2026-07-01,2026-07-02,... — Suma de calorías por fechas (para el gráfico)
 app.get('/api/weekly', async (req, res) => {
   const { dates } = req.query;

@@ -106,14 +106,31 @@ const API = {
   // Resumen semanal para el gráfico
   getWeeklySummary(dates) {
     return this.get(`/api/weekly?dates=${dates.join(',')}`);
+  },
+
+  // Guardar medida corporal manualmente
+  guardarMedida(fecha, item, valor) {
+    return this.post('/api/medidas', { fecha, item, valor });
+  },
+
+  // Obtener medidas guardadas
+  getMedidas() {
+    return this.get('/api/medidas');
+  },
+
+  // Eliminar una medida
+  deleteMedida(id) {
+    return this.delete(`/api/medidas/${id}`);
   }
 };
 
 // 2. CONSTANTES Y CONFIGURACIÓN GLOBAL
 let caloriesChart = null;
+let measurementsChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
 let currentGeminiQueryId = null; // ID de la consulta Gemini actual
+let manualFoodItems = [];
 
 // Obtener fecha actual en formato local YYYY-MM-DD
 function getLocalDateString(date = new Date()) {
@@ -213,6 +230,7 @@ function initRouter() {
     closeMenu();
     if (cleanId === 'dashboard') loadDashboard();
     else if (cleanId === 'historial') loadHistorial();
+    else if (cleanId === 'medidas') loadMedidas();
     else if (cleanId === 'agregar') resetQueryForm();
   }
 
@@ -226,6 +244,7 @@ function triggerViewLoad(viewId) {
 
   if (viewId === 'dashboard') loadDashboard();
   else if (viewId === 'historial') loadHistorial();
+  else if (viewId === 'medidas') loadMedidas();
   else if (viewId === 'agregar') resetQueryForm();
 }
 
@@ -577,8 +596,9 @@ function recalculateTempTotal() {
 async function saveResultsToDB() {
   const mealType = document.getElementById('form-meal-type').value;
   const rawDate  = document.getElementById('form-date').value;
+  const itemsToSave = [...tempAnalysisResults];
 
-  if (tempAnalysisResults.length === 0) {
+  if (itemsToSave.length === 0) {
     showAlert('No hay alimentos para guardar.', 'warning');
     return;
   }
@@ -587,7 +607,7 @@ async function saveResultsToDB() {
   saveBtn.disabled = true;
 
   try {
-    const result = await API.guardarComidas(mealType, rawDate, tempAnalysisResults);
+    const result = await API.guardarComidas(mealType, rawDate, itemsToSave);
 
     if (!result.success) throw new Error(result.error || 'Error desconocido al guardar.');
 
@@ -600,6 +620,40 @@ async function saveResultsToDB() {
   } finally {
     saveBtn.disabled = false;
   }
+}
+
+function toggleManualFoodForm(show) {
+  const container = document.getElementById('manual-food-form-container');
+  const btn = document.getElementById('btn-manual-food');
+  if (!container || !btn) return;
+
+  container.classList.toggle('d-none', !show);
+  btn.classList.toggle('btn-outline-info', !show);
+  btn.classList.toggle('btn-info', show);
+  if (show) {
+    document.getElementById('manual-food-name').focus();
+  }
+}
+
+async function addManualFoodToResults() {
+  const name = document.getElementById('manual-food-name').value.trim();
+  const calories = Number(document.getElementById('manual-food-calories').value);
+
+  if (!name) {
+    showAlert('Ingresa una descripción del alimento.', 'warning');
+    return;
+  }
+  if (!Number.isFinite(calories) || calories < 0) {
+    showAlert('Ingresa un valor de calorías válido.', 'warning');
+    return;
+  }
+
+  tempAnalysisResults.push({ alimento: name, calorias: Math.round(calories), porcion: '1 porción manual' });
+  renderTempResultsTable();
+  document.getElementById('manual-food-name').value = '';
+  document.getElementById('manual-food-calories').value = '';
+  toggleManualFoodForm(false);
+  showAlert('Alimento manual agregado. Puedes guardarlo cuando quieras.', 'success');
 }
 
 // Cargar y mostrar consultas pendientes a Gemini
@@ -676,7 +730,128 @@ async function deletePendingQuery(queryId) {
   }
 }
 
-// 7. CONTROLADOR: HISTORIAL
+// 7. CONTROLADOR: MEDIDAS
+async function loadMedidas() {
+  try {
+    const result = await API.getMedidas();
+    const items = result.data || [];
+    const tbody = document.getElementById('measurements-table-tbody');
+
+    if (!tbody) return;
+
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted-custom">No hay medidas registradas aún.</td></tr>';
+      renderMeasurementsChart([]);
+      return;
+    }
+
+    tbody.innerHTML = '';
+    items.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td data-label="Fecha" class="text-white fs-7">${item.fecha}</td>
+        <td data-label="Medida" class="fw-semibold text-white fs-7">${item.item}</td>
+        <td data-label="cm" class="text-warning fw-semibold">${Number(item.valor).toFixed(1)} cm</td>
+        <td data-label="Acciones" class="text-center">
+          <button class="btn btn-glass-icon btn-sm px-2 text-danger" onclick="deleteMeasurementItem(${item.id})" title="Eliminar medida">
+            <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+          </button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+
+    renderMeasurementsChart(items);
+    lucide.createIcons();
+  } catch (error) {
+    console.error('Error cargando medidas:', error);
+    showAlert('No se pudieron cargar las medidas.', 'danger');
+  }
+}
+
+async function saveMeasurement() {
+  const fecha = document.getElementById('measure-date').value;
+  const item = document.getElementById('measure-item').value;
+  const valor = document.getElementById('measure-value').value;
+
+  if (!fecha || !item || valor === '') {
+    showAlert('Completa la fecha, la medida y los centímetros.', 'warning');
+    return;
+  }
+
+  try {
+    await API.guardarMedida(fecha, item, valor);
+    showAlert('Medida guardada correctamente.', 'success');
+    document.getElementById('measure-value').value = '';
+    document.getElementById('measure-date').value = getLocalDateString();
+    loadMedidas();
+  } catch (error) {
+    console.error('Error guardando medida:', error);
+    showAlert('No se pudo guardar la medida.', 'danger');
+  }
+}
+
+async function deleteMeasurementItem(id) {
+  if (!confirm('¿Deseas eliminar esta medida?')) return;
+
+  try {
+    await API.deleteMedida(id);
+    showAlert('Medida eliminada.', 'success');
+    loadMedidas();
+  } catch (error) {
+    console.error(error);
+    showAlert('No se pudo eliminar la medida.', 'danger');
+  }
+}
+
+function renderMeasurementsChart(items) {
+  const ctx = document.getElementById('measurementsChart');
+  if (!ctx) return;
+
+  const labels = [...new Set(items.map(item => item.fecha))];
+  const metrics = ['ABDOMEN BAJO', 'ABDOMEN ALTO', 'PIERNA ALTA', 'PIERNA BAJA', 'TORSO', 'BRAZO'];
+  const datasets = metrics.map(metric => ({
+    label: metric,
+    data: labels.map(date => {
+      const entry = items.find(i => i.fecha === date && i.item === metric);
+      return entry ? Number(entry.valor) : null;
+    }),
+    borderColor: getMetricColor(metric),
+    backgroundColor: getMetricColor(metric, 0.15),
+    tension: 0.3,
+    fill: false,
+    pointRadius: 3,
+    pointHoverRadius: 5
+  }));
+
+  if (measurementsChart) measurementsChart.destroy();
+  measurementsChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#d7dce5' } } },
+      scales: {
+        y: { beginAtZero: false, ticks: { color: '#8e95b3' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { ticks: { color: '#8e95b3' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function getMetricColor(metric, alpha = 1) {
+  const colors = {
+    'ABDOMEN BAJO': `rgba(249, 115, 22, ${alpha})`,
+    'ABDOMEN ALTO': `rgba(34, 211, 238, ${alpha})`,
+    'PIERNA ALTA': `rgba(132, 204, 22, ${alpha})`,
+    'PIERNA BAJA': `rgba(244, 114, 182, ${alpha})`,
+    'TORSO': `rgba(129, 140, 248, ${alpha})`,
+    'BRAZO': `rgba(245, 158, 11, ${alpha})`
+  };
+  return colors[metric] || `rgba(255,255,255,${alpha})`;
+}
+
+// 8. CONTROLADOR: HISTORIAL
 async function loadHistorial() {
   const filterMeal  = document.getElementById('filter-meal-type').value;
   const filterDate  = document.getElementById('filter-date').value;
@@ -760,11 +935,13 @@ async function deleteAllHistory() {
   }
 }
 
-// 8. INICIALIZACIÓN
+// 9. INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
   // Establecer fecha por defecto
   document.getElementById('dashboard-date').value = getLocalDateString();
   document.getElementById('form-date').value      = getLocalDateString();
+  const measureDateInput = document.getElementById('measure-date');
+  if (measureDateInput) measureDateInput.value = getLocalDateString();
 
   lucide.createIcons();
   initRouter();
@@ -793,11 +970,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('gemini-query-form').addEventListener('submit', handleGeminiQuery);
+  const manualFab = document.getElementById('fab-manual');
+  if (manualFab) {
+    manualFab.addEventListener('click', e => {
+      e.preventDefault();
+      window.location.hash = '#agregar';
+      toggleManualFoodForm(true);
+    });
+  }
   document.getElementById('btn-cancel-results').addEventListener('click', () => {
     resetQueryForm();
     showAlert('Análisis descartado.', 'info');
   });
   document.getElementById('btn-save-results').addEventListener('click', saveResultsToDB);
+  document.getElementById('btn-manual-food').addEventListener('click', () => toggleManualFoodForm(true));
+  document.getElementById('btn-close-manual-food').addEventListener('click', () => toggleManualFoodForm(false));
+  document.getElementById('btn-add-manual-food').addEventListener('click', addManualFoodToResults);
+  document.getElementById('btn-save-measure').addEventListener('click', saveMeasurement);
 
   document.getElementById('filter-meal-type').addEventListener('change', loadHistorial);
   document.getElementById('filter-date').addEventListener('change', loadHistorial);

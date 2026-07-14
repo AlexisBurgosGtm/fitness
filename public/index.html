@@ -55,6 +55,11 @@
               <i data-lucide="calendar" class="me-1_5"></i> Historial
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link d-flex align-items-center" href="#medidas" id="nav-medidas">
+              <i data-lucide="ruler" class="me-1_5"></i> Medidas
+            </a>
+          </li>
         </ul>
       </div>
     </div>
@@ -80,6 +85,9 @@
       </a>
       <a class="nav-link menu-link d-flex align-items-center" href="#historial" id="menu-nav-historial">
         <i data-lucide="calendar" class="me-2"></i> Historial
+      </a>
+      <a class="nav-link menu-link d-flex align-items-center" href="#medidas" id="menu-nav-medidas">
+        <i data-lucide="ruler" class="me-2"></i> Medidas
       </a>
     </nav>
   </aside>
@@ -256,7 +264,10 @@
               </div>
 
               <!-- Botón Consultar -->
-              <div class="text-end">
+              <div class="text-end d-flex justify-content-end gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline-info px-4 py-2 d-inline-flex align-items-center" id="btn-manual-food">
+                  <i data-lucide="plus" class="me-2"></i> Agregar alimento manual
+                </button>
                 <button type="submit" class="btn btn-warning-custom px-4 py-2 d-inline-flex align-items-center" id="btn-submit-query">
                   <i data-lucide="sparkles" class="me-2"></i> Consultar a Gemini
                 </button>
@@ -316,11 +327,106 @@
               </div>
             </div>
 
+            <div id="manual-food-form-container" class="mt-4 d-none">
+              <div class="border border-info rounded-3 p-3 bg-dark bg-opacity-25">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h5 class="section-title m-0">Agregar alimento manualmente</h5>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-close-manual-food">Cerrar</button>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-7">
+                    <label for="manual-food-name" class="form-label text-muted-custom">Descripción del alimento</label>
+                    <input type="text" class="form-control glass-input text-white" id="manual-food-name" placeholder="Ej. Yogur con avena">
+                  </div>
+                  <div class="col-md-3">
+                    <label for="manual-food-calories" class="form-label text-muted-custom">Calorías</label>
+                    <input type="number" min="0" step="1" class="form-control glass-input text-white" id="manual-food-calories" placeholder="120">
+                  </div>
+                  <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-info w-100" id="btn-add-manual-food">Agregar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
     </section>
 
+    <!-- SECCIÓN: MEDIDAS -->
+    <section id="view-medidas" class="spa-view">
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap g-3 mb-4">
+          <div>
+            <h2 class="section-title m-0">Registro de Medidas</h2>
+            <p class="text-muted-custom m-0">Guarda tu evolución en centímetros por fecha.</p>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="glass-card p-3 border border-info border-opacity-25">
+              <h5 class="section-title mb-3">Agregar medida</h5>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label for="measure-date" class="form-label text-muted-custom">Fecha</label>
+                  <input type="date" class="form-control glass-input text-white" id="measure-date">
+                </div>
+                <div class="col-12">
+                  <label for="measure-item" class="form-label text-muted-custom">Medida</label>
+                  <select class="form-select glass-input" id="measure-item">
+                    <option value="ABDOMEN BAJO">ABDOMEN BAJO</option>
+                    <option value="ABDOMEN ALTO">ABDOMEN ALTO</option>
+                    <option value="PIERNA ALTA">PIERNA ALTA</option>
+                    <option value="PIERNA BAJA">PIERNA BAJA</option>
+                    <option value="TORSO">TORSO</option>
+                    <option value="BRAZO">BRAZO</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label for="measure-value" class="form-label text-muted-custom">Centímetros</label>
+                  <input type="number" step="0.1" class="form-control glass-input text-white" id="measure-value" placeholder="85">
+                </div>
+                <div class="col-12">
+                  <button type="button" class="btn btn-info w-100" id="btn-save-measure">Guardar medida</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-8">
+            <div class="glass-card p-3 h-100">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="section-title m-0">Evolución</h5>
+                <span class="text-muted-custom fs-8">Gráfica por item</span>
+              </div>
+              <div id="measurements-chart-container" style="height: 320px;">
+                <canvas id="measurementsChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="table-responsive glass-table-container rounded-3">
+            <table class="table table-dark table-hover m-0 align-middle">
+              <thead>
+                <tr>
+                  <th scope="col">Fecha</th>
+                  <th scope="col">Medida</th>
+                  <th scope="col">cm</th>
+                  <th scope="col" class="text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="measurements-table-tbody">
+                <tr><td colspan="4" class="text-center py-4 text-muted-custom">No hay medidas registradas aún.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- SECCIÓN: HISTORIAL -->
     <section id="view-historial" class="spa-view">
@@ -406,10 +512,14 @@
     </div>
   </div>
 
-  <!-- Botón de Acción Flotante (FAB) Sticky -->
+  <!-- Botones de Acción Flotante (FAB) Sticky -->
   <a href="#agregar" class="fab-btn" id="fab-agregar" title="Agregar alimento">
     <i data-lucide="plus" class="fab-icon"></i>
     <span class="fab-text">Agregar alimento</span>
+  </a>
+  <a href="#agregar" class="fab-btn fab-btn-secondary" id="fab-manual" title="Agregar alimento manual">
+    <i data-lucide="plus" class="fab-icon"></i>
+    <span class="fab-text">Manual</span>
   </a>
 
   <footer class="container text-center py-4 text-muted-custom border-top border-secondary mt-5 fs-8">
