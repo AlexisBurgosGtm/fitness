@@ -6,32 +6,63 @@
 const API = {
   BASE: '',
 
-  async post(url, body) {
-    const res = await fetch(this.BASE + url, {
+  async request(url, options = {}) {
+    let res;
+    try {
+      res = await fetch(this.BASE + url, options);
+    } catch (networkError) {
+      const err = new Error('Sin conexión con el servidor. Comprueba que el backend esté disponible.');
+      err.isNetworkError = true;
+      err.cause = networkError;
+      notifyBackendOffline(err.message);
+      throw err;
+    }
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!res.ok) {
+      const message = data.details || data.error || `Error del servidor (${res.status})`;
+      const err = new Error(message);
+      err.status = res.status;
+      err.payload = data;
+      if (res.status === 503) {
+        err.isNetworkError = true;
+        notifyBackendOffline(message);
+      }
+      throw err;
+    }
+
+    notifyBackendOnline();
+    return data;
+  },
+
+  post(url, body) {
+    return this.request(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    return res.json();
   },
 
-  async put(url, body) {
-    const res = await fetch(this.BASE + url, {
+  put(url, body) {
+    return this.request(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    return res.json();
   },
 
-  async get(url) {
-    const res = await fetch(this.BASE + url);
-    return res.json();
+  get(url) {
+    return this.request(url);
   },
 
-  async delete(url) {
-    const res = await fetch(this.BASE + url, { method: 'DELETE' });
-    return res.json();
+  delete(url) {
+    return this.request(url, { method: 'DELETE' });
   },
 
   // Gemini: consultar calorías de alimentos
@@ -129,8 +160,35 @@ let caloriesChart = null;
 let measurementsChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
+let bootstrapMaxModal = null;
+let bootstrapMeasureModal = null;
 let currentGeminiQueryId = null; // ID de la consulta Gemini actual
 let manualFoodItems = [];
+let isGeminiQueryInFlight = false;
+let isSavingResults = false;
+let isSavingManual = false;
+let backendOnline = true;
+let lastOfflineToastAt = 0;
+let cachedMeasurements = [];
+let measuresHistoryVisible = false;
+let measuresActiveGroup = 'TODOS';
+
+const MEASURE_TYPE_ORDER = [
+  'ABDOMEN BAJO',
+  'ABDOMEN ALTO',
+  'PIERNA ALTA',
+  'PIERNA BAJA',
+  'TORSO',
+  'BRAZO'
+];
+
+const MEASURE_GROUPS = {
+  TODOS: MEASURE_TYPE_ORDER,
+  ABDOMEN: ['ABDOMEN BAJO', 'ABDOMEN ALTO'],
+  PIERNA: ['PIERNA ALTA', 'PIERNA BAJA'],
+  BRAZO: ['BRAZO'],
+  TORSO: ['TORSO']
+};
 
 function renderManualResultsTable() {
   const tbody = document.getElementById('manual-results-tbody');
@@ -183,12 +241,49 @@ function formatDateToDisplay(dateValue) {
   return `${day}/${month}/${year.slice(-2)}`;
 }
 
-// Meta de calorías (guardada en localStorage para que sea personal por navegador)
+// Ideal de calorías (guardado en localStorage, antes llamado "meta")
 function getCalorieTarget() {
   return parseInt(localStorage.getItem('auraCalTarget') || '2000', 10);
 }
 function setCalorieTarget(value) {
   localStorage.setItem('auraCalTarget', value);
+}
+
+// Máximo diario de calorías (parallel a la meta/ideal)
+function getCalorieMax() {
+  return parseInt(localStorage.getItem('auraCalMax') || '2500', 10);
+}
+function setCalorieMax(value) {
+  localStorage.setItem('auraCalMax', value);
+}
+
+function notifyBackendOffline(message) {
+  const now = Date.now();
+  if (backendOnline || now - lastOfflineToastAt > 8000) {
+    lastOfflineToastAt = now;
+    showAlert(message || 'Sin conexión con el servidor. Algunas funciones pueden no estar disponibles.', 'warning');
+  }
+  backendOnline = false;
+}
+
+function notifyBackendOnline() {
+  if (!backendOnline) {
+    backendOnline = true;
+    showAlert('Conexión con el servidor restaurada.', 'success');
+  }
+}
+
+async function checkBackendConnection() {
+  try {
+    await API.getStats();
+    notifyBackendOnline();
+    return true;
+  } catch (error) {
+    if (!error.isNetworkError) {
+      notifyBackendOffline(error.message || 'No se pudo conectar con el servicio.');
+    }
+    return false;
+  }
 }
 
 // 3. ALERTAS TOAST
@@ -277,12 +372,19 @@ function initRouter() {
     else if (cleanId === 'agregar') resetQueryForm();
     else if (cleanId === 'manual') {
       toggleManualFoodForm(true);
+      const manualDate = document.getElementById('manual-date');
+      if (manualDate && !manualDate.value) manualDate.value = getLocalDateString();
       document.getElementById('manual-food-name')?.focus();
     }
   }
 
   window.addEventListener('hashchange', () => handleRoute(window.location.hash));
-  handleRoute(window.location.hash);
+
+  // Cada recarga abre el dashboard (sin conservar la vista previa)
+  if (window.location.hash && window.location.hash !== '#dashboard') {
+    history.replaceState(null, '', '#dashboard');
+  }
+  handleRoute('#dashboard');
 }
 
 function triggerViewLoad(viewId) {
@@ -301,7 +403,10 @@ async function loadDashboard() {
 
   try {
     const target = getCalorieTarget();
+    const maxCalories = getCalorieMax();
     document.getElementById('dash-calories-target-val').textContent = target;
+    const maxEl = document.getElementById('dash-calories-max-val');
+    if (maxEl) maxEl.textContent = maxCalories;
 
     // Obtener alimentos del día desde MySQL
     const result = await API.getComidasByDate(selectedDate);
@@ -325,29 +430,60 @@ async function loadDashboard() {
     document.getElementById('dash-meal-cena').textContent      = `${dinnerSum} kcal`;
     document.getElementById('dash-meal-merienda').textContent  = `${snackSum} kcal`;
 
-    const percentage = target > 0 ? Math.min(Math.round((totalConsumed / target) * 100), 100) : 0;
     const progressPct = target > 0 ? Math.round((totalConsumed / target) * 100) : 0;
-    document.getElementById('dash-percentage-val').textContent = `${progressPct}%`;
-    updateDashboardProgressColor(progressPct);
+    const maxProgressPct = maxCalories > 0 ? Math.round((totalConsumed / maxCalories) * 100) : 0;
+    const idealBarPct = Math.min(progressPct, 100);
+    const maxBarPct = Math.min(maxProgressPct, 100);
+
+    const idealPctEl = document.getElementById('dash-ideal-pct');
+    if (idealPctEl) idealPctEl.textContent = `${progressPct}%`;
+    const maxPctEl = document.getElementById('dash-max-pct');
+    if (maxPctEl) maxPctEl.textContent = `${maxProgressPct}%`;
+
+    updateDashboardProgressColor(progressPct, totalConsumed, target, maxCalories);
 
     const progressBar = document.getElementById('dash-progress-bar');
-    progressBar.style.width = `${percentage}%`;
-    progressBar.setAttribute('aria-valuenow', percentage);
+    progressBar.style.width = `${idealBarPct}%`;
+    progressBar.setAttribute('aria-valuenow', idealBarPct);
 
-    if (progressPct > 100) {
+    if (totalConsumed > target) {
       progressBar.classList.remove('bg-gradient-warning');
-      progressBar.style.background  = 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)';
-      progressBar.style.boxShadow   = '0 0 10px rgba(239, 68, 68, 0.4)';
+      progressBar.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+      progressBar.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.35)';
     } else {
-      progressBar.style.background  = '';
-      progressBar.style.boxShadow   = '';
+      progressBar.style.background = '';
+      progressBar.style.boxShadow = '';
       progressBar.classList.add('bg-gradient-warning');
     }
 
-    const remaining = Math.max(target - totalConsumed, 0);
-    document.getElementById('dash-remaining-calories').textContent = remaining > 0
-      ? `Faltan ${remaining} kcal para la meta.`
-      : '¡Has alcanzado tu meta diaria!';
+    const progressBarMax = document.getElementById('dash-progress-bar-max');
+    if (progressBarMax) {
+      progressBarMax.style.width = `${maxBarPct}%`;
+      progressBarMax.setAttribute('aria-valuenow', maxBarPct);
+
+      if (totalConsumed > maxCalories) {
+        progressBarMax.classList.remove('bg-gradient-max');
+        progressBarMax.style.background = 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)';
+        progressBarMax.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.4)';
+      } else {
+        progressBarMax.style.background = '';
+        progressBarMax.style.boxShadow = '';
+        progressBarMax.classList.add('bg-gradient-max');
+      }
+    }
+
+    const remainingIdeal = Math.max(target - totalConsumed, 0);
+    const remainingMax = Math.max(maxCalories - totalConsumed, 0);
+    if (totalConsumed > maxCalories) {
+      document.getElementById('dash-remaining-calories').textContent =
+        `Has superado el máximo por ${totalConsumed - maxCalories} kcal.`;
+    } else if (totalConsumed > target) {
+      document.getElementById('dash-remaining-calories').textContent =
+        `Ideal alcanzado. Quedan ${remainingMax} kcal hasta el máximo.`;
+    } else {
+      document.getElementById('dash-remaining-calories').textContent =
+        `Faltan ${remainingIdeal} kcal para el ideal.`;
+    }
 
     renderTodayLogsList(items);
     await updateWeeklyChart();
@@ -359,7 +495,7 @@ async function loadDashboard() {
 }
 
 // Renderizar la lista de consumos del día
-function updateDashboardProgressColor(progressPct) {
+function updateDashboardProgressColor(progressPct, totalConsumed = 0, target = 0, maxCalories = 0) {
   const percentageLabel = document.getElementById('dash-percentage-val');
   const largeLabel = document.getElementById('dash-progress-large');
   if (!largeLabel) return;
@@ -370,7 +506,15 @@ function updateDashboardProgressColor(progressPct) {
   largeLabel.classList.remove('text-success', 'text-warning', 'text-danger');
   largeLabel.style.color = '';
 
-  if (progressPct > 90) {
+  if (maxCalories > 0 && totalConsumed > maxCalories) {
+    largeLabel.classList.add('text-danger');
+    if (percentageLabel) percentageLabel.classList.add('text-danger');
+    largeLabel.style.color = '#ef4444';
+  } else if (target > 0 && totalConsumed > target) {
+    largeLabel.classList.add('text-warning');
+    if (percentageLabel) percentageLabel.classList.add('text-warning');
+    largeLabel.style.color = '#f59e0b';
+  } else if (progressPct > 90) {
     largeLabel.classList.add('text-danger');
     if (percentageLabel) percentageLabel.classList.add('text-danger');
     largeLabel.style.color = '#ef4444';
@@ -519,6 +663,8 @@ function resetQueryForm() {
 
 async function handleGeminiQuery(e) {
   e.preventDefault();
+  if (isGeminiQueryInFlight) return;
+
   const queryForm = document.getElementById('gemini-query-form');
   if (!queryForm.checkValidity()) {
     queryForm.classList.add('was-validated');
@@ -529,6 +675,7 @@ async function handleGeminiQuery(e) {
   const loadingDiv = document.getElementById('gemini-loading');
   const submitBtn  = document.getElementById('btn-submit-query');
 
+  isGeminiQueryInFlight = true;
   loadingDiv.classList.remove('d-none');
   document.getElementById('gemini-results-container').classList.add('d-none');
   submitBtn.disabled = true;
@@ -536,10 +683,9 @@ async function handleGeminiQuery(e) {
   try {
     const result = await API.consultarNutricion(queryText);
 
-    if (!result || !result.data) {
-      // Si hay error, guardar la consulta como pendiente con error
-      await guardarConsultaGeminiLocal(queryText, null, 'error', result.error || 'Respuesta inválida');
-      throw new Error(result.error || 'Respuesta inválida del servidor.');
+    if (!result || !Array.isArray(result.data) || result.data.length === 0) {
+      const errMsg = result?.error || result?.details || 'Respuesta inválida del servidor.';
+      throw new Error(errMsg);
     }
 
     tempAnalysisResults = result.data;
@@ -567,8 +713,16 @@ async function handleGeminiQuery(e) {
     renderTempResultsTable();
   } catch (error) {
     console.error('Error consultando backend:', error);
-    showAlert(`Error: ${error.message}. Inténtalo de nuevo más tarde. La consulta se guardó para recuperación.`, 'danger');
+    const details = error.payload?.details || error.payload?.error || error.message;
+    await guardarConsultaGeminiLocal(queryText, null, 'error', details);
+    showAlert(`Error de Gemini: ${details}`, 'danger');
+    const sourceBadge = document.getElementById('gemini-source-badge');
+    if (sourceBadge) {
+      sourceBadge.textContent = `Error: ${details}`;
+      sourceBadge.className = 'text-danger fs-8 m-0';
+    }
   } finally {
+    isGeminiQueryInFlight = false;
     loadingDiv.classList.add('d-none');
     submitBtn.disabled = false;
   }
@@ -641,6 +795,8 @@ function recalculateTempTotal() {
 
 // Guardar en MySQL
 async function saveResultsToDB() {
+  if (isSavingResults) return;
+
   const mealType = document.getElementById('form-meal-type').value;
   const rawDate  = document.getElementById('form-date').value;
   const itemsToSave = [...tempAnalysisResults];
@@ -651,6 +807,7 @@ async function saveResultsToDB() {
   }
 
   const saveBtn = document.getElementById('btn-save-results');
+  isSavingResults = true;
   saveBtn.disabled = true;
 
   try {
@@ -658,13 +815,14 @@ async function saveResultsToDB() {
 
     if (!result.success) throw new Error(result.error || 'Error desconocido al guardar.');
 
-    showAlert(`¡${result.insertedCount} alimento(s) guardados en MySQL!`, 'success');
+    showAlert(`¡${result.insertedCount} alimento(s) guardados!`, 'success');
     resetQueryForm();
     window.location.hash = '#dashboard';
   } catch (error) {
     console.error('Error guardando alimentos:', error);
     showAlert('Error al guardar en la base de datos: ' + error.message, 'danger');
   } finally {
+    isSavingResults = false;
     saveBtn.disabled = false;
   }
 }
@@ -701,8 +859,52 @@ function addManualFoodToResults() {
 
   manualFoodItems.push({ alimento: name, calorias: Math.round(calories), porcion: '1 porción manual' });
   renderManualResultsTable();
-  document.getElementById('manual-food-form').reset();
-  showAlert('Alimento manual agregado. Puedes guardarlo cuando quieras.', 'success');
+  document.getElementById('manual-food-name').value = '';
+  document.getElementById('manual-food-calories').value = '';
+  document.getElementById('manual-food-name')?.focus();
+  showAlert('Alimento agregado a la lista. Guárdalo en el diario cuando termines.', 'success');
+}
+
+async function saveManualResultsToDB() {
+  if (isSavingManual) return;
+
+  const mealType = document.getElementById('manual-meal-type').value;
+  const rawDate = document.getElementById('manual-date').value || getLocalDateString();
+  const itemsToSave = [...manualFoodItems];
+
+  if (itemsToSave.length === 0) {
+    showAlert('No hay alimentos para guardar.', 'warning');
+    return;
+  }
+
+  const saveBtn = document.getElementById('btn-save-manual-results');
+  isSavingManual = true;
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const result = await API.guardarComidas(mealType, rawDate, itemsToSave);
+    if (!result.success) throw new Error(result.error || 'Error desconocido al guardar.');
+
+    showAlert(`¡${result.insertedCount} alimento(s) guardados!`, 'success');
+    manualFoodItems = [];
+    renderManualResultsTable();
+    document.getElementById('manual-food-form')?.reset();
+    document.getElementById('manual-date').value = getLocalDateString();
+    document.getElementById('manual-meal-type').value = 'DESAYUNO';
+    window.location.hash = '#dashboard';
+  } catch (error) {
+    console.error('Error guardando alimentos manuales:', error);
+    showAlert('Error al guardar en la base de datos: ' + error.message, 'danger');
+  } finally {
+    isSavingManual = false;
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+function discardManualResults() {
+  manualFoodItems = [];
+  renderManualResultsTable();
+  showAlert('Lista manual descartada.', 'info');
 }
 
 // Cargar y mostrar consultas pendientes a Gemini
@@ -780,37 +982,63 @@ async function deletePendingQuery(queryId) {
 }
 
 // 7. CONTROLADOR: MEDIDAS
+function openMeasureModal() {
+  const dateInput = document.getElementById('measure-date');
+  if (dateInput) dateInput.value = getLocalDateString();
+  const valueInput = document.getElementById('measure-value');
+  if (valueInput) valueInput.value = '';
+  if (bootstrapMeasureModal) bootstrapMeasureModal.show();
+}
+
+function toggleMeasuresHistory() {
+  measuresHistoryVisible = !measuresHistoryVisible;
+  const panel = document.getElementById('measures-history-panel');
+  const label = document.getElementById('btn-toggle-measures-history-label');
+  if (panel) panel.classList.toggle('d-none', !measuresHistoryVisible);
+  if (label) label.textContent = measuresHistoryVisible ? 'Ocultar historial' : 'Ver historial';
+}
+
+function setMeasuresGroupFilter(group) {
+  measuresActiveGroup = MEASURE_GROUPS[group] ? group : 'TODOS';
+  document.querySelectorAll('#measures-group-filters button').forEach(btn => {
+    btn.classList.toggle('btn-glass-active', btn.dataset.group === measuresActiveGroup);
+  });
+  renderMeasurementsChart(cachedMeasurements);
+}
+
 async function loadMedidas() {
   try {
     const result = await API.getMedidas();
     const items = result.data || [];
+    cachedMeasurements = items;
+
     const tbody = document.getElementById('measurements-table-tbody');
+    const countEl = document.getElementById('measures-history-count');
+    if (countEl) countEl.textContent = `${items.length} registro${items.length === 1 ? '' : 's'}`;
 
-    if (!tbody) return;
-
-    if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted-custom">No hay medidas registradas aún.</td></tr>';
-      renderMeasurementsChart([]);
-      return;
+    if (tbody) {
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted-custom">No hay medidas registradas aún.</td></tr>';
+      } else {
+        tbody.innerHTML = '';
+        items.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td data-label="Fecha" class="text-white fs-7">${formatDateToDisplay(item.fecha)}</td>
+            <td data-label="Medida" class="fw-semibold text-white fs-7">${item.item}</td>
+            <td data-label="cm" class="text-warning fw-semibold">${Number(item.valor).toFixed(1)} cm</td>
+            <td data-label="Acciones" class="text-center">
+              <button class="btn btn-glass-icon btn-sm px-2 text-danger" onclick="deleteMeasurementItem(${item.id})" title="Eliminar medida">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </td>`;
+          tbody.appendChild(tr);
+        });
+        lucide.createIcons();
+      }
     }
 
-    tbody.innerHTML = '';
-    items.forEach(item => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td data-label="Fecha" class="text-white fs-7">${formatDateToDisplay(item.fecha)}</td>
-        <td data-label="Medida" class="fw-semibold text-white fs-7">${item.item}</td>
-        <td data-label="cm" class="text-warning fw-semibold">${Number(item.valor).toFixed(1)} cm</td>
-        <td data-label="Acciones" class="text-center">
-          <button class="btn btn-glass-icon btn-sm px-2 text-danger" onclick="deleteMeasurementItem(${item.id})" title="Eliminar medida">
-            <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
-          </button>
-        </td>`;
-      tbody.appendChild(tr);
-    });
-
     renderMeasurementsChart(items);
-    lucide.createIcons();
   } catch (error) {
     console.error('Error cargando medidas:', error);
     showAlert('No se pudieron cargar las medidas.', 'danger');
@@ -827,15 +1055,21 @@ async function saveMeasurement() {
     return;
   }
 
+  const saveBtn = document.getElementById('btn-save-measure');
+  if (saveBtn) saveBtn.disabled = true;
+
   try {
     await API.guardarMedida(fecha, item, valor);
     showAlert('Medida guardada correctamente.', 'success');
     document.getElementById('measure-value').value = '';
     document.getElementById('measure-date').value = getLocalDateString();
+    if (bootstrapMeasureModal) bootstrapMeasureModal.hide();
     loadMedidas();
   } catch (error) {
     console.error('Error guardando medida:', error);
     showAlert('No se pudo guardar la medida.', 'danger');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -854,21 +1088,34 @@ async function deleteMeasurementItem(id) {
 
 function renderMeasurementsChart(items) {
   const ctx = document.getElementById('measurementsChart');
+  const emptyState = document.getElementById('measurements-chart-empty');
   if (!ctx) return;
+
+  const allowedTypes = MEASURE_GROUPS[measuresActiveGroup] || MEASURE_TYPE_ORDER;
 
   const normalizedItems = (items || [])
     .map(item => ({
       ...item,
-      fecha: String(item.fecha || '').trim(),
+      fecha: String(item.fecha || '').trim().split('T')[0],
       item: String(item.item || '').trim().toUpperCase()
     }))
-    .filter(item => item.fecha && item.item);
+    .filter(item => item.fecha && item.item && allowedTypes.includes(item.item));
 
-  const labels = [...new Set(normalizedItems.map(item => item.fecha))].sort();
-  const metrics = [...new Set(normalizedItems.map(item => item.item))];
-  const displayLabels = labels.map(label => formatDateToDisplay(label));
+  const typeLabels = allowedTypes.filter(type =>
+    normalizedItems.some(item => item.item === type)
+  );
 
-  if (!labels.length || !metrics.length) {
+  const allDates = [...new Set(normalizedItems.map(item => item.fecha))].sort();
+  // Mostrar hasta las últimas 6 fechas para no saturar las barras agrupadas
+  const dates = allDates.slice(-6);
+  const displayDateLabels = dates.map(date => formatDateToDisplay(date));
+
+  const hasData = typeLabels.length > 0 && dates.length > 0;
+
+  if (emptyState) emptyState.classList.toggle('d-none', hasData);
+  ctx.style.display = hasData ? 'block' : 'none';
+
+  if (!hasData) {
     if (measurementsChart) {
       measurementsChart.destroy();
       measurementsChart = null;
@@ -876,21 +1123,21 @@ function renderMeasurementsChart(items) {
     return;
   }
 
-  const datasets = metrics.map(metric => ({
-    label: metric,
-    data: labels.map(date => {
-      const entry = normalizedItems.find(i => i.fecha === date && i.item === metric);
-      return entry ? Number(entry.valor) : null;
-    }),
-    borderColor: getMetricColor(metric),
-    backgroundColor: getMetricColor(metric, 0.15),
-    borderWidth: 2.5,
-    tension: 0.3,
-    fill: false,
-    pointRadius: 3,
-    pointHoverRadius: 5,
-    spanGaps: true
-  }));
+  const datasets = dates.map((date, index) => {
+    const color = getDateBarColor(index, dates.length);
+    return {
+      label: displayDateLabels[index],
+      data: typeLabels.map(type => {
+        const entry = normalizedItems.find(i => i.fecha === date && i.item === type);
+        return entry ? Number(entry.valor) : null;
+      }),
+      backgroundColor: color,
+      borderColor: color.replace('0.85', '1'),
+      borderWidth: 1,
+      borderRadius: 6,
+      maxBarThickness: 42
+    };
+  });
 
   if (measurementsChart) measurementsChart.destroy();
 
@@ -898,15 +1145,61 @@ function renderMeasurementsChart(items) {
   ctx.style.height = '100%';
 
   measurementsChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: displayLabels, datasets },
+    type: 'bar',
+    data: {
+      labels: typeLabels.map(formatMeasureLabel),
+      datasets
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#d7dce5' } } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            color: '#d7dce5',
+            boxWidth: 12,
+            usePointStyle: true,
+            pointStyle: 'rectRounded'
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const value = ctx.parsed.y;
+              if (value == null) return `${ctx.dataset.label}: —`;
+              return `${ctx.dataset.label}: ${value.toFixed(1)} cm`;
+            }
+          }
+        }
+      },
       scales: {
-        y: { beginAtZero: false, ticks: { color: '#8e95b3' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        x: { ticks: { color: '#8e95b3' }, grid: { display: false } }
+        x: {
+          stacked: false,
+          ticks: {
+            color: '#c5cae0',
+            font: { family: 'Plus Jakarta Sans', size: 11, weight: '600' },
+            maxRotation: 0,
+            autoSkip: false
+          },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: false,
+          ticks: {
+            color: '#8e95b3',
+            font: { family: 'Plus Jakarta Sans', size: 11 },
+            callback: value => `${value} cm`
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          title: {
+            display: true,
+            text: 'Centímetros',
+            color: '#8e95b3',
+            font: { size: 11 }
+          }
+        }
       }
     }
   });
@@ -914,6 +1207,32 @@ function renderMeasurementsChart(items) {
   requestAnimationFrame(() => {
     if (measurementsChart) measurementsChart.resize();
   });
+}
+
+function formatMeasureLabel(metric) {
+  const map = {
+    'ABDOMEN BAJO': 'Abd. Bajo',
+    'ABDOMEN ALTO': 'Abd. Alto',
+    'PIERNA ALTA': 'Pierna Alta',
+    'PIERNA BAJA': 'Pierna Baja',
+    'TORSO': 'Torso',
+    'BRAZO': 'Brazo'
+  };
+  return map[metric] || metric;
+}
+
+function getDateBarColor(index, total) {
+  const palette = [
+    'rgba(56, 189, 248, 0.85)',
+    'rgba(99, 102, 241, 0.85)',
+    'rgba(168, 85, 247, 0.85)',
+    'rgba(34, 211, 238, 0.85)',
+    'rgba(132, 204, 22, 0.85)',
+    'rgba(245, 158, 11, 0.85)'
+  ];
+  if (total <= palette.length) return palette[index % palette.length];
+  const hue = Math.round((index / Math.max(total, 1)) * 300);
+  return `hsla(${hue}, 75%, 60%, 0.85)`;
 }
 
 function getMetricColor(metric, alpha = 1) {
@@ -1014,16 +1333,26 @@ async function deleteAllHistory() {
 
 // 9. INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
-  // Establecer fecha por defecto
-  document.getElementById('dashboard-date').value = getLocalDateString();
-  document.getElementById('form-date').value      = getLocalDateString();
+  const today = getLocalDateString();
+
+  // Establecer fechas por defecto
+  document.getElementById('dashboard-date').value = today;
+  document.getElementById('form-date').value = today;
   const measureDateInput = document.getElementById('measure-date');
-  if (measureDateInput) measureDateInput.value = getLocalDateString();
+  if (measureDateInput) measureDateInput.value = today;
+  const manualDateInput = document.getElementById('manual-date');
+  if (manualDateInput) manualDateInput.value = today;
+  const filterDateInput = document.getElementById('filter-date');
+  if (filterDateInput) filterDateInput.value = today;
 
   lucide.createIcons();
   initRouter();
+  checkBackendConnection();
 
   bootstrapTargetModal = new bootstrap.Modal(document.getElementById('modalTargetCalories'));
+  bootstrapMaxModal = new bootstrap.Modal(document.getElementById('modalMaxCalories'));
+  const measureModalEl = document.getElementById('modalNewMeasure');
+  if (measureModalEl) bootstrapMeasureModal = new bootstrap.Modal(measureModalEl);
 
   // ── Event Listeners ──
   document.getElementById('dashboard-date').addEventListener('change', loadDashboard);
@@ -1036,13 +1365,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-save-target-calories').addEventListener('click', () => {
     const val = parseInt(document.getElementById('input-target-calories').value, 10);
+    const maxVal = getCalorieMax();
     if (isNaN(val) || val < 500 || val > 10000) {
       showAlert('Introduce un valor calórico razonable (500 - 10000 kcal).', 'warning');
       return;
     }
+    if (val > maxVal) {
+      showAlert('El ideal no puede ser mayor que el máximo diario.', 'warning');
+      return;
+    }
     setCalorieTarget(val);
     bootstrapTargetModal.hide();
-    showAlert('¡Meta calórica actualizada!', 'success');
+    showAlert('¡Ideal calórico actualizado!', 'success');
+    loadDashboard();
+  });
+
+  document.getElementById('btn-edit-max').addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('input-max-calories').value = getCalorieMax();
+    bootstrapMaxModal.show();
+  });
+
+  document.getElementById('btn-save-max-calories').addEventListener('click', () => {
+    const val = parseInt(document.getElementById('input-max-calories').value, 10);
+    const ideal = getCalorieTarget();
+    if (isNaN(val) || val < 500 || val > 15000) {
+      showAlert('Introduce un máximo razonable (500 - 15000 kcal).', 'warning');
+      return;
+    }
+    if (val < ideal) {
+      showAlert('El máximo debe ser mayor o igual al ideal diario.', 'warning');
+      return;
+    }
+    setCalorieMax(val);
+    bootstrapMaxModal.hide();
+    showAlert('¡Máximo calórico actualizado!', 'success');
     loadDashboard();
   });
 
@@ -1076,13 +1433,21 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     addManualFoodToResults();
   });
-  document.getElementById('btn-save-measure').addEventListener('click', saveMeasurement);
+  document.getElementById('btn-save-manual-results')?.addEventListener('click', saveManualResultsToDB);
+  document.getElementById('btn-cancel-manual-results')?.addEventListener('click', discardManualResults);
+  document.getElementById('btn-save-measure')?.addEventListener('click', saveMeasurement);
+  document.getElementById('btn-open-measure-modal')?.addEventListener('click', openMeasureModal);
+  document.getElementById('btn-open-measure-modal-empty')?.addEventListener('click', openMeasureModal);
+  document.getElementById('btn-toggle-measures-history')?.addEventListener('click', toggleMeasuresHistory);
+  document.querySelectorAll('#measures-group-filters button').forEach(btn => {
+    btn.addEventListener('click', () => setMeasuresGroupFilter(btn.dataset.group));
+  });
 
   document.getElementById('filter-meal-type').addEventListener('change', loadHistorial);
   document.getElementById('filter-date').addEventListener('change', loadHistorial);
   document.getElementById('btn-clear-filters').addEventListener('click', () => {
     document.getElementById('filter-meal-type').value = 'TODOS';
-    document.getElementById('filter-date').value      = '';
+    document.getElementById('filter-date').value = getLocalDateString();
     loadHistorial();
   });
 
@@ -1094,4 +1459,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (menuToggle) menuToggle.addEventListener('click', () => openMenu());
   if (menuClose) menuClose.addEventListener('click', () => closeMenu());
   if (menuOverlay) menuOverlay.addEventListener('click', () => closeMenu());
+
+  window.addEventListener('offline', () => {
+    notifyBackendOffline('Sin conexión a internet. El backend no está disponible.');
+  });
+  window.addEventListener('online', () => {
+    checkBackendConnection();
+  });
 });

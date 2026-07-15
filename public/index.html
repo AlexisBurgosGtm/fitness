@@ -129,17 +129,31 @@
             </div>
             <div class="progress-bar-container mt-3">
               <div class="d-flex justify-content-between text-muted-custom fs-7 mb-1">
-                <span>Meta: <span id="dash-calories-target-val">2000</span> kcal</span>
-                <span style="visibility: hidden;" id="dash-percentage-val">0%</span>
+                <span>Ideal: <span id="dash-calories-target-val">2000</span> kcal</span>
+                <span id="dash-ideal-pct">0%</span>
               </div>
               <div class="progress progress-custom">
                 <div id="dash-progress-bar" class="progress-bar bg-gradient-warning" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
               </div>
             </div>
-            <p class="fs-8 text-muted-custom mt-3" id="dash-remaining-calories">Faltan 2000 kcal para la meta.</p>
-            <button class="btn btn-sm btn-link text-warning p-0 mt-3 text-decoration-none d-flex align-items-center" id="btn-edit-target">
-              <i data-lucide="edit-3" class="me-1 fs-7"></i> Ajustar Meta Diaria
-            </button>
+            <div class="progress-bar-container mt-3">
+              <div class="d-flex justify-content-between text-muted-custom fs-7 mb-1">
+                <span>Máximo: <span id="dash-calories-max-val">2500</span> kcal</span>
+                <span id="dash-max-pct">0%</span>
+              </div>
+              <div class="progress progress-custom progress-custom-max">
+                <div id="dash-progress-bar-max" class="progress-bar bg-gradient-max" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+              </div>
+            </div>
+            <p class="fs-8 text-muted-custom mt-3" id="dash-remaining-calories">Faltan 2000 kcal para el ideal.</p>
+            <div class="d-flex flex-wrap gap-3 mt-3">
+              <button class="btn btn-sm btn-link text-warning p-0 text-decoration-none d-flex align-items-center" id="btn-edit-target">
+                <i data-lucide="edit-3" class="me-1 fs-7"></i> Ajustar Ideal
+              </button>
+              <button class="btn btn-sm btn-link text-info p-0 text-decoration-none d-flex align-items-center" id="btn-edit-max">
+                <i data-lucide="gauge" class="me-1 fs-7"></i> Ajustar Máximo
+              </button>
+            </div>
           </div>
         </div>
 
@@ -346,6 +360,19 @@
 
             <form id="manual-food-form" class="needs-validation" novalidate>
               <div class="row g-3">
+                <div class="col-md-6 col-12">
+                  <label for="manual-meal-type" class="form-label text-muted-custom">Tipo de Comida</label>
+                  <select class="form-select glass-input" id="manual-meal-type" required>
+                    <option value="DESAYUNO" selected>Desayuno</option>
+                    <option value="ALMUERZO">Almuerzo</option>
+                    <option value="CENA">Cena</option>
+                    <option value="MERIENDA">Merienda</option>
+                  </select>
+                </div>
+                <div class="col-md-6 col-12">
+                  <label for="manual-date" class="form-label text-muted-custom">Fecha del Consumo</label>
+                  <input type="date" class="form-select glass-input text-white" id="manual-date" required>
+                </div>
                 <div class="col-md-7">
                   <label for="manual-food-name" class="form-label text-muted-custom">Descripción del alimento</label>
                   <input type="text" class="form-control glass-input text-white" id="manual-food-name" placeholder="Ej. Yogur con avena" required>
@@ -383,6 +410,12 @@
                   </tbody>
                 </table>
               </div>
+              <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn btn-outline-secondary px-4" id="btn-cancel-manual-results">Descartar</button>
+                <button type="button" class="btn btn-warning-custom px-4" id="btn-save-manual-results">
+                  <i data-lucide="check" class="me-1"></i> Guardar en mi Diario
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -392,58 +425,51 @@
     <!-- SECCIÓN: MEDIDAS -->
     <section id="view-medidas" class="spa-view">
       <div class="glass-card p-4">
-        <div class="d-flex justify-content-between align-items-center flex-wrap g-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
           <div>
             <h2 class="section-title m-0">Registro de Medidas</h2>
-            <p class="text-muted-custom m-0">Guarda tu evolución en centímetros por fecha.</p>
+            <p class="text-muted-custom m-0">Evolución corporal en centímetros, agrupada por tipo.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center" id="btn-toggle-measures-history">
+              <i data-lucide="table" class="me-1 fs-7"></i>
+              <span id="btn-toggle-measures-history-label">Ver historial</span>
+            </button>
+            <button type="button" class="btn btn-info btn-sm d-flex align-items-center" id="btn-open-measure-modal">
+              <i data-lucide="plus" class="me-1 fs-7"></i> Nuevo registro
+            </button>
           </div>
         </div>
 
-        <div class="row g-4">
-          <div class="col-lg-4">
-            <div class="glass-card p-3 border border-info border-opacity-25">
-              <h5 class="section-title mb-3">Agregar medida</h5>
-              <div class="row g-3">
-                <div class="col-12">
-                  <label for="measure-date" class="form-label text-muted-custom">Fecha</label>
-                  <input type="date" class="form-control glass-input text-white" id="measure-date">
-                </div>
-                <div class="col-12">
-                  <label for="measure-item" class="form-label text-muted-custom">Medida</label>
-                  <select class="form-select glass-input" id="measure-item">
-                    <option value="ABDOMEN BAJO">ABDOMEN BAJO</option>
-                    <option value="ABDOMEN ALTO">ABDOMEN ALTO</option>
-                    <option value="PIERNA ALTA">PIERNA ALTA</option>
-                    <option value="PIERNA BAJA">PIERNA BAJA</option>
-                    <option value="TORSO">TORSO</option>
-                    <option value="BRAZO">BRAZO</option>
-                  </select>
-                </div>
-                <div class="col-12">
-                  <label for="measure-value" class="form-label text-muted-custom">Centímetros</label>
-                  <input type="number" step="0.1" class="form-control glass-input text-white" id="measure-value" placeholder="85">
-                </div>
-                <div class="col-12">
-                  <button type="button" class="btn btn-info w-100" id="btn-save-measure">Guardar medida</button>
-                </div>
-              </div>
+        <div class="measures-chart-hero glass-card p-3 p-md-4 mb-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <h5 class="section-title m-0">Comparativa por tipo</h5>
+              <span class="text-muted-custom fs-8">Barras agrupadas: cada agrupación es un tipo de medida</span>
+            </div>
+            <div class="glass-btn-group d-inline-flex p-1" id="measures-group-filters" role="group" aria-label="Filtrar grupo de medidas">
+              <button type="button" class="btn-glass-active" data-group="TODOS">Todos</button>
+              <button type="button" data-group="ABDOMEN">Abdomen</button>
+              <button type="button" data-group="PIERNA">Pierna</button>
+              <button type="button" data-group="BRAZO">Brazo</button>
+              <button type="button" data-group="TORSO">Torso</button>
             </div>
           </div>
-
-          <div class="col-lg-8">
-            <div class="glass-card p-3 h-100">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="section-title m-0">Evolución</h5>
-                <span class="text-muted-custom fs-8">Gráfica por item</span>
-              </div>
-              <div id="measurements-chart-container" style="height: 320px;">
-                <canvas id="measurementsChart"></canvas>
-              </div>
+          <div id="measurements-chart-container" class="measures-chart-canvas">
+            <canvas id="measurementsChart"></canvas>
+            <div id="measurements-chart-empty" class="measures-chart-empty d-none">
+              <i data-lucide="ruler" class="mb-2"></i>
+              <p class="m-0">Aún no hay medidas para graficar.</p>
+              <button type="button" class="btn btn-sm btn-info mt-3" id="btn-open-measure-modal-empty">Agregar primer registro</button>
             </div>
           </div>
         </div>
 
-        <div class="mt-4">
+        <div id="measures-history-panel" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="section-title m-0">Historial de medidas</h5>
+            <span class="text-muted-custom fs-8" id="measures-history-count">0 registros</span>
+          </div>
           <div class="table-responsive glass-table-container rounded-3">
             <table class="table table-dark table-hover m-0 align-middle">
               <thead>
@@ -469,7 +495,7 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap g-3 mb-4">
           <div>
             <h2 class="section-title m-0">Historial de Alimentos</h2>
-            <p class="text-muted-custom m-0">Visualiza y gestiona todos los registros guardados en tu IndexedDB.</p>
+            <p class="text-muted-custom m-0">Visualiza y gestiona todos los registros guardados.</p>
           </div>
           <div class="d-flex gap-2">
             <!-- Filtro de Comida -->
@@ -524,24 +550,86 @@
     </section>
   </main>
 
-  <!-- Modal para ajustar la meta de calorías -->
+  <!-- Modal para ajustar la meta / ideal de calorías -->
   <div class="modal fade" id="modalTargetCalories" tabindex="-1" aria-labelledby="modalTargetCaloriesLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content glass-card border-0">
         <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title fw-bold text-white" id="modalTargetCaloriesLabel">Ajustar Meta Diaria</h5>
+          <h5 class="modal-title fw-bold text-white" id="modalTargetCaloriesLabel">Ajustar Ideal Diario</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body pt-3">
           <div class="mb-3">
-            <label for="input-target-calories" class="form-label text-muted-custom">Meta Diaria de Calorías (kcal)</label>
+            <label for="input-target-calories" class="form-label text-muted-custom">Ideal Diario de Calorías (kcal)</label>
             <input type="number" class="form-control glass-input text-white" id="input-target-calories" min="500" max="10000" step="50">
-            <div class="form-text text-muted-custom fs-8">Introduce tus calorías objetivo por día.</div>
+            <div class="form-text text-muted-custom fs-8">Cantidad ideal de calorías que buscas consumir por día.</div>
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
           <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
           <button type="button" class="btn btn-warning-custom btn-sm" id="btn-save-target-calories">Guardar Cambios</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para ajustar el máximo de calorías -->
+  <div class="modal fade" id="modalMaxCalories" tabindex="-1" aria-labelledby="modalMaxCaloriesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass-card border-0">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold text-white" id="modalMaxCaloriesLabel">Ajustar Máximo Diario</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <div class="mb-3">
+            <label for="input-max-calories" class="form-label text-muted-custom">Máximo Diario de Calorías (kcal)</label>
+            <input type="number" class="form-control glass-input text-white" id="input-max-calories" min="500" max="15000" step="50">
+            <div class="form-text text-muted-custom fs-8">Valor máximo que no deberías superar en el día.</div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-info btn-sm" id="btn-save-max-calories">Guardar Cambios</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para nuevo registro de medida -->
+  <div class="modal fade" id="modalNewMeasure" tabindex="-1" aria-labelledby="modalNewMeasureLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass-card border-0">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold text-white" id="modalNewMeasureLabel">Nuevo registro de medida</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <div class="row g-3">
+            <div class="col-12">
+              <label for="measure-date" class="form-label text-muted-custom">Fecha</label>
+              <input type="date" class="form-control glass-input text-white" id="measure-date">
+            </div>
+            <div class="col-12">
+              <label for="measure-item" class="form-label text-muted-custom">Tipo de medida</label>
+              <select class="form-select glass-input" id="measure-item">
+                <option value="ABDOMEN BAJO">ABDOMEN BAJO</option>
+                <option value="ABDOMEN ALTO">ABDOMEN ALTO</option>
+                <option value="PIERNA ALTA">PIERNA ALTA</option>
+                <option value="PIERNA BAJA">PIERNA BAJA</option>
+                <option value="TORSO">TORSO</option>
+                <option value="BRAZO">BRAZO</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label for="measure-value" class="form-label text-muted-custom">Centímetros</label>
+              <input type="number" step="0.1" class="form-control glass-input text-white" id="measure-value" placeholder="85">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-info btn-sm" id="btn-save-measure">Guardar medida</button>
         </div>
       </div>
     </div>

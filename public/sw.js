@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alexis-cal-cache-v12';
+const CACHE_NAME = 'alexis-cal-cache-v14';
 const ASSETS = [
   '/',
   '/index.html',
@@ -35,6 +35,24 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Las rutas de API siempre van a red (sin cache-first)
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        new Response(JSON.stringify({
+          error: 'Sin conexión con el servidor.',
+          details: 'El backend no está disponible.'
+        }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {

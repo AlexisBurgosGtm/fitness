@@ -81,10 +81,7 @@ app.post('/api/nutrition', async (req, res) => {
     console.error('❌ Error al consultar Gemini API:', error);
     res.status(500).json({
       error: 'Error al consultar el servicio de Inteligencia Artificial.',
-      details: error.message,
-      data: generateMockNutrition(query),
-      isMock: true,
-      message: 'Error con Gemini. Se muestran datos simulados como alternativa.'
+      details: error.message || 'Gemini no pudo procesar la consulta.'
     });
   }
 });
