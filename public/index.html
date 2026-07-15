@@ -35,7 +35,7 @@
         <i data-lucide="flame" class="text-warning me-2 animate-pulse"></i>
         <span class="brand-text">Alexis<span class="text-warning">Cal</span></span>
       </a>
-      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <button class="hidden navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
@@ -264,10 +264,7 @@
               </div>
 
               <!-- Botón Consultar -->
-              <div class="text-end d-flex justify-content-end gap-2 flex-wrap">
-                <button type="button" class="btn btn-outline-info px-4 py-2 d-inline-flex align-items-center" id="btn-manual-food">
-                  <i data-lucide="plus-circle" class="me-2"></i> Abrir vista manual
-                </button>
+              <div class="text-center mt-2">
                 <button type="submit" class="btn btn-warning-custom px-4 py-2 d-inline-flex align-items-center" id="btn-submit-query">
                   <i data-lucide="sparkles" class="me-2"></i> Consultar a Gemini
                 </button>
@@ -551,11 +548,11 @@
   </div>
 
   <!-- Botones de Acción Flotante (FAB) Sticky -->
-  <a href="#agregar" class="fab-btn" id="fab-agregar" aria-label="Agregar alimento">
-    <i data-lucide="plus" class="fab-icon"></i>
-    <span class="fab-text">Agregar alimento</span>
+  <a href="#agregar" class="fab-btn" id="fab-agregar" aria-label="Consultar a Gemini">
+    <i data-lucide="sparkles" class="fab-icon"></i>
+    <span class="fab-text">Consultar Gemini</span>
   </a>
-  <a href="#manual" class="fab-btn fab-btn-secondary" id="fab-manual" aria-label="Agregar alimento manual">
+  <a href="#manual" class="fab-btn fab-btn-center" id="fab-manual-global" aria-label="Agregar alimento manual">
     <i data-lucide="plus" class="fab-icon"></i>
   </a>
 

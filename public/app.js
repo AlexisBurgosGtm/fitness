@@ -167,6 +167,22 @@ function getLocalDateString(date = new Date()) {
   return adjustedDate.toISOString().split('T')[0];
 }
 
+function formatDateToDisplay(dateValue) {
+  if (!dateValue) return '';
+
+  const value = String(dateValue).trim();
+  if (!value) return '';
+
+  const datePart = value.includes('T') ? value.split('T')[0] : value;
+  const parts = datePart.split('-');
+  if (parts.length !== 3) return value;
+
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return value;
+
+  return `${day}/${month}/${year.slice(-2)}`;
+}
+
 // Meta de calorías (guardada en localStorage para que sea personal por navegador)
 function getCalorieTarget() {
   return parseInt(localStorage.getItem('auraCalTarget') || '2000', 10);
@@ -271,7 +287,7 @@ function initRouter() {
 
 function triggerViewLoad(viewId) {
   const fab = document.getElementById('fab-agregar');
-  if (fab) fab.style.display = (viewId === 'agregar') ? 'none' : 'flex';
+  if (fab) fab.style.display = 'flex';
 
   if (viewId === 'dashboard') loadDashboard();
   else if (viewId === 'historial') loadHistorial();
@@ -782,7 +798,7 @@ async function loadMedidas() {
     items.forEach(item => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td data-label="Fecha" class="text-white fs-7">${item.fecha}</td>
+        <td data-label="Fecha" class="text-white fs-7">${formatDateToDisplay(item.fecha)}</td>
         <td data-label="Medida" class="fw-semibold text-white fs-7">${item.item}</td>
         <td data-label="cm" class="text-warning fw-semibold">${Number(item.valor).toFixed(1)} cm</td>
         <td data-label="Acciones" class="text-center">
@@ -840,26 +856,50 @@ function renderMeasurementsChart(items) {
   const ctx = document.getElementById('measurementsChart');
   if (!ctx) return;
 
-  const labels = [...new Set(items.map(item => item.fecha))];
-  const metrics = ['ABDOMEN BAJO', 'ABDOMEN ALTO', 'PIERNA ALTA', 'PIERNA BAJA', 'TORSO', 'BRAZO'];
+  const normalizedItems = (items || [])
+    .map(item => ({
+      ...item,
+      fecha: String(item.fecha || '').trim(),
+      item: String(item.item || '').trim().toUpperCase()
+    }))
+    .filter(item => item.fecha && item.item);
+
+  const labels = [...new Set(normalizedItems.map(item => item.fecha))].sort();
+  const metrics = [...new Set(normalizedItems.map(item => item.item))];
+  const displayLabels = labels.map(label => formatDateToDisplay(label));
+
+  if (!labels.length || !metrics.length) {
+    if (measurementsChart) {
+      measurementsChart.destroy();
+      measurementsChart = null;
+    }
+    return;
+  }
+
   const datasets = metrics.map(metric => ({
     label: metric,
     data: labels.map(date => {
-      const entry = items.find(i => i.fecha === date && i.item === metric);
+      const entry = normalizedItems.find(i => i.fecha === date && i.item === metric);
       return entry ? Number(entry.valor) : null;
     }),
     borderColor: getMetricColor(metric),
     backgroundColor: getMetricColor(metric, 0.15),
+    borderWidth: 2.5,
     tension: 0.3,
     fill: false,
     pointRadius: 3,
-    pointHoverRadius: 5
+    pointHoverRadius: 5,
+    spanGaps: true
   }));
 
   if (measurementsChart) measurementsChart.destroy();
+
+  ctx.style.width = '100%';
+  ctx.style.height = '100%';
+
   measurementsChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets },
+    data: { labels: displayLabels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -869,6 +909,10 @@ function renderMeasurementsChart(items) {
         x: { ticks: { color: '#8e95b3' }, grid: { display: false } }
       }
     }
+  });
+
+  requestAnimationFrame(() => {
+    if (measurementsChart) measurementsChart.resize();
   });
 }
 
@@ -1003,7 +1047,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('gemini-query-form').addEventListener('submit', handleGeminiQuery);
-  const manualFab = document.getElementById('fab-manual');
+  const geminiFab = document.getElementById('fab-agregar');
+  if (geminiFab) {
+    geminiFab.addEventListener('click', e => {
+      e.preventDefault();
+      window.location.hash = '#agregar';
+    });
+  }
+
+  const manualFab = document.getElementById('fab-manual-global');
   if (manualFab) {
     manualFab.addEventListener('click', e => {
       e.preventDefault();
@@ -1015,7 +1067,10 @@ document.addEventListener('DOMContentLoaded', () => {
     showAlert('Análisis descartado.', 'info');
   });
   document.getElementById('btn-save-results').addEventListener('click', saveResultsToDB);
-  document.getElementById('btn-manual-food').addEventListener('click', () => openManualView());
+  const manualFormButton = document.getElementById('btn-manual-food');
+  if (manualFormButton) {
+    manualFormButton.addEventListener('click', () => openManualView());
+  }
   document.getElementById('btn-back-to-gemini').addEventListener('click', () => window.location.hash = '#agregar');
   document.getElementById('manual-food-form').addEventListener('submit', e => {
     e.preventDefault();

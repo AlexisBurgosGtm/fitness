@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alexis-cal-cache-v11';
+const CACHE_NAME = 'alexis-cal-cache-v12';
 const ASSETS = [
   '/',
   '/index.html',

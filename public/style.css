@@ -138,6 +138,28 @@ h1, h2, h3, h4, h5, h6, .brand-text {
   border: 1px solid transparent;
 }
 
+.manual-action-btn {
+  width: 3.7rem;
+  height: 3.7rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.2rem;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.manual-action-btn:hover,
+.manual-action-btn:focus-visible {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 14px 32px rgba(56, 189, 248, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
 .navbar-nav .nav-link:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
@@ -575,19 +597,25 @@ select.glass-input option {
   bottom: 2rem;
 }
 
-.fab-btn-secondary {
-  right: 2rem;
-  left: auto;
-  transform: none;
+.fab-btn-center {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
   bottom: 2rem;
-  background: var(--gradient-warning);
-  color: #0b0c16 !important;
-  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.45);
+  width: 3.6rem;
+  height: 3.6rem;
+  padding: 0;
+  border-radius: 999px;
+  justify-content: center;
+  background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+  color: #ffffff !important;
+  box-shadow: 0 10px 30px rgba(56, 189, 248, 0.35);
 }
 
-.fab-btn-secondary:hover {
-  background: linear-gradient(135deg, #fbbf24 0%, #f43f5e 100%);
-  box-shadow: 0 12px 40px rgba(245, 158, 11, 0.6);
+.fab-btn-center:hover {
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #60a5fa 0%, #8b5cf6 100%);
+  box-shadow: 0 14px 36px rgba(56, 189, 248, 0.42);
 }
 
 @media (max-width: 576px) {
@@ -601,9 +629,10 @@ select.glass-input option {
     bottom: 5.5rem;
     right: 1.5rem;
   }
-  .fab-btn-secondary {
+  .fab-btn-center {
     bottom: 1.5rem;
-    right: 1.5rem;
+    width: 3.3rem;
+    height: 3.3rem;
   }
 }
 
@@ -712,6 +741,10 @@ select.glass-input option {
   color: #0b0c16 !important;
 }
 
+.fab-btn-center:hover {
+  transform: translateX(-50%);
+}
+
 .fab-btn:active {
   transform: translateY(0);
 }
@@ -734,3 +767,8 @@ select.glass-input option {
   }
 }
 
+
+
+.hidden{
+  visibility: hidden;
+}
