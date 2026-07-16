@@ -60,6 +60,11 @@
               <i data-lucide="ruler" class="me-1_5"></i> Medidas
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link d-flex align-items-center" href="#reportes" id="nav-reportes">
+              <i data-lucide="bar-chart-3" class="me-1_5"></i> Reportes
+            </a>
+          </li>
         </ul>
       </div>
     </div>
@@ -88,6 +93,9 @@
       </a>
       <a class="nav-link menu-link d-flex align-items-center" href="#medidas" id="menu-nav-medidas">
         <i data-lucide="ruler" class="me-2"></i> Medidas
+      </a>
+      <a class="nav-link menu-link d-flex align-items-center" href="#reportes" id="menu-nav-reportes">
+        <i data-lucide="bar-chart-3" class="me-2"></i> Reportes
       </a>
     </nav>
   </aside>
@@ -196,8 +204,46 @@
         </div>
       </div>
 
+      <!-- Controles: Deuda y pérdida de grasa -->
+      <div class="row g-4 mb-4">
+        <div class="col-md-6 col-12">
+          <div class="glass-card p-4 h-100 control-metric-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="card-subtitle text-muted-custom text-uppercase fs-7 mb-1">Deuda Calórica</h5>
+                <h2 class="card-title fw-bold m-0" id="dash-calorie-debt">0 <span class="fs-6 fw-normal">kcal</span></h2>
+                <p class="fs-8 text-muted-custom mt-2 mb-0">Excedente vs ideal acumulado (últimos 7 días).</p>
+              </div>
+              <div class="icon-box bg-warning-glow">
+                <i data-lucide="scale" class="text-warning"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-12">
+          <div class="glass-card p-4 h-100 control-metric-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="card-subtitle text-muted-custom text-uppercase fs-7 mb-1">Pérdida de grasa estimada</h5>
+                <h2 class="card-title fw-bold m-0" id="dash-fat-loss-today">0.000 <span class="fs-6 fw-normal">lb</span></h2>
+                <p class="fs-8 text-muted-custom mt-2 mb-0" id="dash-fat-loss-today-detail">Déficit vs máximo de hoy · ~3500 kcal ≈ 1 lb</p>
+              </div>
+              <div class="icon-box bg-info-glow">
+                <i data-lucide="trending-down" class="text-info"></i>
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between text-muted-custom fs-8">
+                <span>Acumulado del mes</span>
+                <span class="text-info fw-semibold" id="dash-fat-loss-month">0.000 lb</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Fila de Gráficos y Últimos Consumos -->
-      <div class="row g-4">
+      <div class="row g-4 mb-4">
         <!-- Gráfico del Consumo -->
         <div class="col-lg-7 col-12">
           <div class="glass-card p-4 h-100">
@@ -226,6 +272,24 @@
                   <a href="#agregar" class="btn btn-sm btn-outline-warning rounded-pill mt-3 px-3" id="dash-lnk-add">Registrar Primero</a>
                 </li>
               </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfico mensual de pérdida de grasa -->
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+              <div>
+                <h4 class="section-title m-0">Pérdida de grasa estimada</h4>
+                <p class="text-muted-custom fs-8 m-0">Mes en curso · déficit diario respecto al máximo (~3500 kcal ≈ 1 lb)</p>
+              </div>
+              <span class="badge bg-info text-dark fs-7 px-3 py-2" id="dash-fat-loss-month-badge">0.000 lb este mes</span>
+            </div>
+            <div class="chart-container position-relative" style="height: 280px;">
+              <canvas id="fatLossMonthChart"></canvas>
             </div>
           </div>
         </div>
@@ -546,6 +610,69 @@
           </button>
         </div>
 
+      </div>
+    </section>
+
+    <!-- SECCIÓN: REPORTES -->
+    <section id="view-reportes" class="spa-view">
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+          <div>
+            <h2 class="section-title m-0">Reportes</h2>
+            <p class="text-muted-custom m-0">Consumo calórico y pérdida de grasa estimada por día.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-end">
+            <div>
+              <label for="report-month" class="form-label text-muted-custom fs-8 mb-1">Mes</label>
+              <select id="report-month" class="form-select glass-input border-0 py-2 fs-7" style="width: 150px;"></select>
+            </div>
+            <div>
+              <label for="report-year" class="form-label text-muted-custom fs-8 mb-1">Año</label>
+              <select id="report-year" class="form-select glass-input border-0 py-2 fs-7" style="width: 110px;"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-2">
+          <div class="col-md-4 col-12">
+            <div class="stat-box rounded-3 p-3">
+              <div class="text-muted-custom fs-8 text-uppercase">Total consumido</div>
+              <div class="fw-bold fs-4 text-white" id="report-total-calories">0 kcal</div>
+            </div>
+          </div>
+          <div class="col-md-4 col-12">
+            <div class="stat-box rounded-3 p-3">
+              <div class="text-muted-custom fs-8 text-uppercase">Deuda del mes</div>
+              <div class="fw-bold fs-4 text-warning" id="report-month-debt">0 kcal</div>
+            </div>
+          </div>
+          <div class="col-md-4 col-12">
+            <div class="stat-box rounded-3 p-3">
+              <div class="text-muted-custom fs-8 text-uppercase">Pérdida estimada</div>
+              <div class="fw-bold fs-4 text-info" id="report-month-fat-loss">0.000 lb</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mt-1">
+          <div class="col-12">
+            <div class="glass-card p-3 p-md-4">
+              <h4 class="section-title mb-3">Consumo calórico por día</h4>
+              <div class="chart-container position-relative" style="height: 300px;">
+                <canvas id="reportCaloriesChart"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="glass-card p-3 p-md-4">
+              <h4 class="section-title mb-3">Pérdida de grasa estimada por día</h4>
+              <p class="text-muted-custom fs-8 mb-3">Basada en el déficit respecto al máximo diario (~3500 kcal ≈ 1 lb)</p>
+              <div class="chart-container position-relative" style="height: 300px;">
+                <canvas id="reportFatLossChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>

@@ -157,6 +157,9 @@ const API = {
 
 // 2. CONSTANTES Y CONFIGURACIÓN GLOBAL
 let caloriesChart = null;
+let fatLossMonthChart = null;
+let reportCaloriesChart = null;
+let reportFatLossChart = null;
 let measurementsChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
@@ -172,6 +175,9 @@ let lastOfflineToastAt = 0;
 let cachedMeasurements = [];
 let measuresHistoryVisible = false;
 let measuresActiveGroup = 'TODOS';
+
+/** ~3500 kcal de déficit ≈ 1 lb de grasa */
+const KCAL_PER_LB_FAT = 3500;
 
 const MEASURE_TYPE_ORDER = [
   'ABDOMEN BAJO',
@@ -255,6 +261,58 @@ function getCalorieMax() {
 }
 function setCalorieMax(value) {
   localStorage.setItem('auraCalMax', value);
+}
+
+function estimateFatLossLbs(deficitKcal) {
+  return Math.max(0, Number(deficitKcal) || 0) / KCAL_PER_LB_FAT;
+}
+
+function formatFatLbs(lbs) {
+  return (Number(lbs) || 0).toFixed(3);
+}
+
+function calcDailySurplus(consumed, ideal) {
+  return Math.max(0, (Number(consumed) || 0) - (Number(ideal) || 0));
+}
+
+function calcDailyDeficitFromMax(consumed, maxCalories) {
+  const kcal = Number(consumed) || 0;
+  // Solo estima pérdida si hubo consumo registrado ese día
+  if (kcal <= 0) return 0;
+  return Math.max(0, (Number(maxCalories) || 0) - kcal);
+}
+
+function getDateRangeInclusive(startDate, endDate) {
+  const dates = [];
+  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  while (cursor <= end) {
+    dates.push(getLocalDateString(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function getMonthDateRange(year, monthIndex) {
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0);
+  return getDateRangeInclusive(start, end);
+}
+
+function getLastNDates(n, fromDate = new Date()) {
+  const dates = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+    d.setDate(d.getDate() - i);
+    dates.push(getLocalDateString(d));
+  }
+  return dates;
+}
+
+async function fetchCaloriesByDates(dates) {
+  if (!dates.length) return {};
+  const summaryResult = await API.getWeeklySummary(dates);
+  return summaryResult.data || {};
 }
 
 function notifyBackendOffline(message) {
@@ -369,6 +427,7 @@ function initRouter() {
     if (cleanId === 'dashboard') loadDashboard();
     else if (cleanId === 'historial') loadHistorial();
     else if (cleanId === 'medidas') loadMedidas();
+    else if (cleanId === 'reportes') loadReportes();
     else if (cleanId === 'agregar') resetQueryForm();
     else if (cleanId === 'manual') {
       toggleManualFoodForm(true);
@@ -394,6 +453,7 @@ function triggerViewLoad(viewId) {
   if (viewId === 'dashboard') loadDashboard();
   else if (viewId === 'historial') loadHistorial();
   else if (viewId === 'medidas') loadMedidas();
+  else if (viewId === 'reportes') loadReportes();
   else if (viewId === 'agregar') resetQueryForm();
 }
 
@@ -485,8 +545,22 @@ async function loadDashboard() {
         `Faltan ${remainingIdeal} kcal para el ideal.`;
     }
 
+    // Pérdida de grasa estimada del día seleccionado (déficit vs máximo)
+    const todayDeficit = calcDailyDeficitFromMax(totalConsumed, maxCalories);
+    const todayFatLoss = estimateFatLossLbs(todayDeficit);
+    const fatTodayEl = document.getElementById('dash-fat-loss-today');
+    if (fatTodayEl) {
+      fatTodayEl.innerHTML = `${formatFatLbs(todayFatLoss)} <span class="fs-6 fw-normal">lb</span>`;
+    }
+    const fatDetailEl = document.getElementById('dash-fat-loss-today-detail');
+    if (fatDetailEl) {
+      fatDetailEl.textContent = todayDeficit > 0
+        ? `Déficit de ${Math.round(todayDeficit)} kcal vs máximo · ~3500 kcal ≈ 1 lb`
+        : 'Sin déficit respecto al máximo en este día.';
+    }
+
     renderTodayLogsList(items);
-    await updateWeeklyChart();
+    await updateDashboardAnalytics(selectedDate);
 
   } catch (error) {
     console.error('Error cargando dashboard:', error);
@@ -588,66 +662,326 @@ async function deleteItemFromDashboard(id) {
   }
 }
 
-// Gráfico semanal (consulta un único endpoint en lugar de 7 llamadas)
-async function updateWeeklyChart() {
-  const dates = [];
-  const labels = [];
-  const today = new Date();
+// Gráficos y métricas de control (deuda 7 días + pérdida grasa del mes)
+async function updateDashboardAnalytics(referenceDateStr) {
+  const ideal = getCalorieTarget();
+  const maxCalories = getCalorieMax();
+  const refDate = referenceDateStr
+    ? new Date(`${referenceDateStr}T12:00:00`)
+    : new Date();
 
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
-    dates.push(getLocalDateString(d));
-    labels.push(`${d.toLocaleDateString('es-ES', { weekday: 'short' })} ${d.getDate()}`);
+  const weekDates = getLastNDates(7, refDate);
+  const weekLabels = weekDates.map(dateStr => {
+    const d = new Date(`${dateStr}T12:00:00`);
+    return `${d.toLocaleDateString('es-ES', { weekday: 'short' })} ${d.getDate()}`;
+  });
+
+  const monthDates = getMonthDateRange(refDate.getFullYear(), refDate.getMonth());
+  const allDates = [...new Set([...weekDates, ...monthDates])];
+  const summaryMap = await fetchCaloriesByDates(allDates);
+
+  // Deuda calórica: excedente vs ideal sumado (últimos 7 días)
+  const debt = weekDates.reduce((sum, date) => {
+    return sum + calcDailySurplus(summaryMap[date] || 0, ideal);
+  }, 0);
+  const debtEl = document.getElementById('dash-calorie-debt');
+  if (debtEl) {
+    debtEl.innerHTML = `${Math.round(debt)} <span class="fs-6 fw-normal">kcal</span>`;
   }
 
-  const summaryResult = await API.getWeeklySummary(dates);
-  const summaryMap = summaryResult.data || {};
-  const calorieSums = dates.map(d => summaryMap[d] || 0);
+  // Pérdida de grasa del mes (déficit vs máximo por día)
+  const monthFatByDay = monthDates.map(date =>
+    estimateFatLossLbs(calcDailyDeficitFromMax(summaryMap[date] || 0, maxCalories))
+  );
+  const monthFatTotal = monthFatByDay.reduce((a, b) => a + b, 0);
+  const monthFatEl = document.getElementById('dash-fat-loss-month');
+  if (monthFatEl) monthFatEl.textContent = `${formatFatLbs(monthFatTotal)} lb`;
+  const monthBadge = document.getElementById('dash-fat-loss-month-badge');
+  if (monthBadge) monthBadge.textContent = `${formatFatLbs(monthFatTotal)} lb este mes`;
 
-  const ctx = document.getElementById('caloriesChart').getContext('2d');
-  if (caloriesChart) caloriesChart.destroy();
+  // Gráfico semanal de calorías
+  const calorieSums = weekDates.map(d => summaryMap[d] || 0);
+  const weekCtx = document.getElementById('caloriesChart')?.getContext('2d');
+  if (weekCtx) {
+    if (caloriesChart) caloriesChart.destroy();
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-  gradient.addColorStop(0, 'rgba(245, 158, 11, 0.85)');
-  gradient.addColorStop(1, 'rgba(236, 72, 153, 0.05)');
+    const gradient = weekCtx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(245, 158, 11, 0.85)');
+    gradient.addColorStop(1, 'rgba(236, 72, 153, 0.05)');
 
-  caloriesChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Calorías diarias',
-        data: calorieSums,
-        backgroundColor: gradient,
-        borderColor: 'rgba(245, 158, 11, 0.9)',
-        borderWidth: 1.5,
-        borderRadius: 8,
-        borderSkipped: false
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(19, 21, 38, 0.95)',
-          titleFont: { family: 'Outfit', size: 12, weight: 'bold' },
-          bodyFont:  { family: 'Plus Jakarta Sans', size: 12 },
-          borderColor: 'rgba(255, 255, 255, 0.1)',
-          borderWidth: 1,
-          padding: 10,
-          displayColors: false,
-          callbacks: { label: ctx => `Consumo: ${ctx.parsed.y} kcal` }
-        }
+    caloriesChart = new Chart(weekCtx, {
+      type: 'bar',
+      data: {
+        labels: weekLabels,
+        datasets: [{
+          label: 'Calorías diarias',
+          data: calorieSums,
+          backgroundColor: gradient,
+          borderColor: 'rgba(245, 158, 11, 0.9)',
+          borderWidth: 1.5,
+          borderRadius: 8,
+          borderSkipped: false
+        }]
       },
-      scales: {
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8e95b3', font: { family: 'Plus Jakarta Sans', size: 11 } } },
-        x: { grid: { display: false },                  ticks: { color: '#8e95b3', font: { family: 'Plus Jakarta Sans', size: 11 } } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(19, 21, 38, 0.95)',
+            titleFont: { family: 'Outfit', size: 12, weight: 'bold' },
+            bodyFont: { family: 'Plus Jakarta Sans', size: 12 },
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: false,
+            callbacks: { label: ctx => `Consumo: ${ctx.parsed.y} kcal` }
+          }
+        },
+        scales: {
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8e95b3', font: { family: 'Plus Jakarta Sans', size: 11 } } },
+          x: { grid: { display: false }, ticks: { color: '#8e95b3', font: { family: 'Plus Jakarta Sans', size: 11 } } }
+        }
       }
+    });
+  }
+
+  // Gráfico mensual de pérdida de grasa estimada
+  const fatCtx = document.getElementById('fatLossMonthChart')?.getContext('2d');
+  if (fatCtx) {
+    if (fatLossMonthChart) fatLossMonthChart.destroy();
+
+    const fatGradient = fatCtx.createLinearGradient(0, 0, 0, 280);
+    fatGradient.addColorStop(0, 'rgba(56, 189, 248, 0.85)');
+    fatGradient.addColorStop(1, 'rgba(99, 102, 241, 0.08)');
+
+    const dayLabels = monthDates.map(date => String(Number(date.split('-')[2])));
+
+    fatLossMonthChart = new Chart(fatCtx, {
+      type: 'bar',
+      data: {
+        labels: dayLabels,
+        datasets: [{
+          label: 'Pérdida estimada (lb)',
+          data: monthFatByDay.map(v => Number(v.toFixed(4))),
+          backgroundColor: fatGradient,
+          borderColor: 'rgba(56, 189, 248, 0.9)',
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(19, 21, 38, 0.95)',
+            callbacks: {
+              title: items => {
+                const day = items[0]?.label;
+                return `Día ${day}`;
+              },
+              label: ctx => `Pérdida estimada: ${formatFatLbs(ctx.parsed.y)} lb`
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: {
+              color: '#8e95b3',
+              font: { family: 'Plus Jakarta Sans', size: 11 },
+              callback: value => `${value} lb`
+            }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#8e95b3', font: { family: 'Plus Jakarta Sans', size: 10 }, maxRotation: 0 }
+          }
+        }
+      }
+    });
+  }
+}
+
+// Alias por compatibilidad
+async function updateWeeklyChart() {
+  await updateDashboardAnalytics(document.getElementById('dashboard-date')?.value);
+}
+
+// ── REPORTES ──
+function initReportSelectors() {
+  const monthSelect = document.getElementById('report-month');
+  const yearSelect = document.getElementById('report-year');
+  if (!monthSelect || !yearSelect) return;
+
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  const now = new Date();
+
+  if (!monthSelect.options.length) {
+    monthNames.forEach((name, idx) => {
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      opt.textContent = name;
+      monthSelect.appendChild(opt);
+    });
+  }
+
+  if (!yearSelect.options.length) {
+    const currentYear = now.getFullYear();
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearSelect.appendChild(opt);
     }
-  });
+  }
+
+  if (!monthSelect.dataset.initialized) {
+    monthSelect.value = String(now.getMonth());
+    yearSelect.value = String(now.getFullYear());
+    monthSelect.dataset.initialized = '1';
+  }
+}
+
+async function loadReportes() {
+  initReportSelectors();
+  const monthSelect = document.getElementById('report-month');
+  const yearSelect = document.getElementById('report-year');
+  if (!monthSelect || !yearSelect) return;
+
+  const year = parseInt(yearSelect.value, 10);
+  const monthIndex = parseInt(monthSelect.value, 10);
+  const ideal = getCalorieTarget();
+  const maxCalories = getCalorieMax();
+  const dates = getMonthDateRange(year, monthIndex);
+
+  try {
+    const summaryMap = await fetchCaloriesByDates(dates);
+    const calorieData = dates.map(d => summaryMap[d] || 0);
+    const fatData = calorieData.map(kcal => estimateFatLossLbs(calcDailyDeficitFromMax(kcal, maxCalories)));
+    const totalCalories = calorieData.reduce((a, b) => a + b, 0);
+    const monthDebt = calorieData.reduce((sum, kcal) => sum + calcDailySurplus(kcal, ideal), 0);
+    const monthFat = fatData.reduce((a, b) => a + b, 0);
+
+    const totalEl = document.getElementById('report-total-calories');
+    const debtEl = document.getElementById('report-month-debt');
+    const fatEl = document.getElementById('report-month-fat-loss');
+    if (totalEl) totalEl.textContent = `${Math.round(totalCalories)} kcal`;
+    if (debtEl) debtEl.textContent = `${Math.round(monthDebt)} kcal`;
+    if (fatEl) fatEl.textContent = `${formatFatLbs(monthFat)} lb`;
+
+    const dayLabels = dates.map(date => String(Number(date.split('-')[2])));
+
+    const calCtx = document.getElementById('reportCaloriesChart')?.getContext('2d');
+    if (calCtx) {
+      if (reportCaloriesChart) reportCaloriesChart.destroy();
+      const gradient = calCtx.createLinearGradient(0, 0, 0, 300);
+      gradient.addColorStop(0, 'rgba(245, 158, 11, 0.85)');
+      gradient.addColorStop(1, 'rgba(236, 72, 153, 0.08)');
+
+      reportCaloriesChart = new Chart(calCtx, {
+        type: 'bar',
+        data: {
+          labels: dayLabels,
+          datasets: [{
+            label: 'Calorías',
+            data: calorieData,
+            backgroundColor: gradient,
+            borderColor: 'rgba(245, 158, 11, 0.9)',
+            borderWidth: 1,
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: items => `Día ${items[0]?.label}`,
+                label: ctx => `Consumo: ${ctx.parsed.y} kcal`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: { color: '#8e95b3' }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#8e95b3', maxRotation: 0 }
+            }
+          }
+        }
+      });
+    }
+
+    const fatCtx = document.getElementById('reportFatLossChart')?.getContext('2d');
+    if (fatCtx) {
+      if (reportFatLossChart) reportFatLossChart.destroy();
+      const fatGradient = fatCtx.createLinearGradient(0, 0, 0, 300);
+      fatGradient.addColorStop(0, 'rgba(56, 189, 248, 0.85)');
+      fatGradient.addColorStop(1, 'rgba(99, 102, 241, 0.08)');
+
+      reportFatLossChart = new Chart(fatCtx, {
+        type: 'bar',
+        data: {
+          labels: dayLabels,
+          datasets: [{
+            label: 'Pérdida (lb)',
+            data: fatData.map(v => Number(v.toFixed(4))),
+            backgroundColor: fatGradient,
+            borderColor: 'rgba(56, 189, 248, 0.9)',
+            borderWidth: 1,
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: items => `Día ${items[0]?.label}`,
+                label: ctx => `Pérdida estimada: ${formatFatLbs(ctx.parsed.y)} lb`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                color: '#8e95b3',
+                callback: value => `${value} lb`
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#8e95b3', maxRotation: 0 }
+            }
+          }
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error cargando reportes:', error);
+    showAlert('No se pudieron cargar los reportes.', 'danger');
+  }
 }
 
 // 6. CONTROLADOR: AGREGAR / GEMINI
@@ -1450,6 +1784,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-date').value = getLocalDateString();
     loadHistorial();
   });
+
+  initReportSelectors();
+  document.getElementById('report-month')?.addEventListener('change', loadReportes);
+  document.getElementById('report-year')?.addEventListener('change', loadReportes);
 
   document.getElementById('btn-delete-all-db').addEventListener('click', deleteAllHistory);
 

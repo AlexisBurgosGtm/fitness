@@ -235,6 +235,11 @@ h1, h2, h3, h4, h5, h6, .brand-text {
   border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
+.bg-info-glow {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
 .bg-danger-glow {
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.25);
