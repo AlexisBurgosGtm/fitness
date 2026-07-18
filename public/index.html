@@ -100,6 +100,12 @@
     </nav>
   </aside>
 
+  <!-- Banner de conexión (sin servidor / sin internet) -->
+  <div id="connection-banner" class="connection-banner d-none" role="status" aria-live="polite">
+    <i data-lucide="wifi-off" class="connection-banner-icon"></i>
+    <span id="connection-banner-text">Sin conexión con el servidor. Comprueba tu internet o que el backend esté activo.</span>
+  </div>
+
   <!-- Contenedor Principal -->
   <main class="container py-4 my-2">
     <!-- Notificaciones del Sistema -->
@@ -418,7 +424,7 @@
               </div>
               <div>
                 <h2 class="section-title m-0">Agregar alimento manual</h2>
-                <p class="text-muted-custom m-0">Registra un alimento simple y agrégalo a la lista de resultados para guardarlo después.</p>
+                <p class="text-muted-custom m-0">Registra un alimento y se guardará directamente en tu diario.</p>
               </div>
             </div>
 
@@ -446,40 +452,14 @@
                   <input type="number" min="0" step="1" class="form-control glass-input text-white" id="manual-food-calories" placeholder="120" required>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
-                  <button type="submit" class="btn btn-warning-custom w-100" id="btn-add-manual-food">Agregar</button>
+                  <button type="submit" class="btn btn-warning-custom w-100" id="btn-add-manual-food">Guardar</button>
                 </div>
               </div>
             </form>
 
-            <div class="d-flex justify-content-end gap-2 mt-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
               <button type="button" class="btn btn-outline-secondary px-4" id="btn-back-to-gemini">Volver a Gemini</button>
-            </div>
-
-            <div class="mt-4 border-top border-secondary pt-4">
-              <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
-                <h4 class="section-title m-0">Lista provisional</h4>
-                <span class="badge bg-warning text-dark fs-7 px-3 py-2" id="manual-total-temp">Total: 0 kcal</span>
-              </div>
-              <div class="table-responsive glass-table-container rounded-3">
-                <table class="table table-dark table-hover m-0 align-middle">
-                  <thead>
-                    <tr>
-                      <th scope="col" style="width: 50%">Alimento</th>
-                      <th scope="col" style="width: 25%">Porción</th>
-                      <th scope="col" style="width: 25%">Calorías (kcal)</th>
-                    </tr>
-                  </thead>
-                  <tbody id="manual-results-tbody">
-                    <tr><td colspan="3" class="text-center text-muted-custom py-4">Aún no agregaste alimentos manuales.</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="d-flex justify-content-end gap-2 mt-3">
-                <button type="button" class="btn btn-outline-secondary px-4" id="btn-cancel-manual-results">Descartar</button>
-                <button type="button" class="btn btn-warning-custom px-4" id="btn-save-manual-results">
-                  <i data-lucide="check" class="me-1"></i> Guardar en mi Diario
-                </button>
-              </div>
+              <button type="button" class="btn btn-outline-warning px-4" id="btn-manual-go-dashboard">Ir al Dashboard</button>
             </div>
           </div>
         </div>

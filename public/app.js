@@ -166,7 +166,6 @@ let bootstrapTargetModal = null;
 let bootstrapMaxModal = null;
 let bootstrapMeasureModal = null;
 let currentGeminiQueryId = null; // ID de la consulta Gemini actual
-let manualFoodItems = [];
 let isGeminiQueryInFlight = false;
 let isSavingResults = false;
 let isSavingManual = false;
@@ -195,34 +194,6 @@ const MEASURE_GROUPS = {
   BRAZO: ['BRAZO'],
   TORSO: ['TORSO']
 };
-
-function renderManualResultsTable() {
-  const tbody = document.getElementById('manual-results-tbody');
-  const totalBadge = document.getElementById('manual-total-temp');
-  if (!tbody || !totalBadge) return;
-
-  tbody.innerHTML = '';
-
-  if (!manualFoodItems || manualFoodItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted-custom py-4">Aún no agregaste alimentos manuales.</td></tr>';
-    totalBadge.textContent = 'Total: 0 kcal';
-    return;
-  }
-
-  let totalKcal = 0;
-  manualFoodItems.forEach((item, index) => {
-    const kcal = Math.round(Number(item.calorias || 0));
-    totalKcal += kcal;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td data-label="Alimento" class="text-white">${item.alimento || ''}</td>
-      <td data-label="Porción" class="text-muted-custom">${item.porcion || '1 porción'}</td>
-      <td data-label="Calorías (kcal)" class="fw-semibold text-warning">${kcal} kcal</td>`;
-    tbody.appendChild(tr);
-  });
-
-  totalBadge.textContent = `Total: ${totalKcal} kcal`;
-}
 
 // Obtener fecha actual en formato local YYYY-MM-DD
 function getLocalDateString(date = new Date()) {
@@ -315,31 +286,44 @@ async function fetchCaloriesByDates(dates) {
   return summaryResult.data || {};
 }
 
+function setConnectionBanner(visible, message) {
+  const banner = document.getElementById('connection-banner');
+  const textEl = document.getElementById('connection-banner-text');
+  if (!banner) return;
+
+  if (message && textEl) textEl.textContent = message;
+  banner.classList.toggle('d-none', !visible);
+  document.body.classList.toggle('has-connection-banner', visible);
+  if (visible) lucide.createIcons();
+}
+
 function notifyBackendOffline(message) {
-  const now = Date.now();
-  if (backendOnline || now - lastOfflineToastAt > 8000) {
-    lastOfflineToastAt = now;
-    showAlert(message || 'Sin conexión con el servidor. Algunas funciones pueden no estar disponibles.', 'warning');
-  }
+  const text = message || 'Sin conexión con el servidor. Comprueba tu internet o que el backend esté activo.';
+  setConnectionBanner(true, text);
   backendOnline = false;
 }
 
 function notifyBackendOnline() {
   if (!backendOnline) {
-    backendOnline = true;
+    setConnectionBanner(false);
     showAlert('Conexión con el servidor restaurada.', 'success');
   }
+  backendOnline = true;
+  setConnectionBanner(false);
 }
 
 async function checkBackendConnection() {
+  if (!navigator.onLine) {
+    notifyBackendOffline('Sin conexión a internet. El servidor no está disponible.');
+    return false;
+  }
+
   try {
     await API.getStats();
     notifyBackendOnline();
     return true;
   } catch (error) {
-    if (!error.isNetworkError) {
-      notifyBackendOffline(error.message || 'No se pudo conectar con el servicio.');
-    }
+    notifyBackendOffline(error.message || 'No se pudo conectar con el servicio.');
     return false;
   }
 }
@@ -1177,10 +1161,14 @@ function openManualView() {
   setTimeout(() => document.getElementById('manual-food-name')?.focus(), 120);
 }
 
-function addManualFoodToResults() {
+async function saveManualFoodDirect() {
+  if (isSavingManual) return;
+
   const name = document.getElementById('manual-food-name').value.trim();
   const caloriesValue = document.getElementById('manual-food-calories').value;
   const calories = Number(caloriesValue);
+  const mealType = document.getElementById('manual-meal-type').value;
+  const rawDate = document.getElementById('manual-date').value || getLocalDateString();
 
   if (!name) {
     showAlert('Ingresa una descripción del alimento.', 'warning');
@@ -1190,55 +1178,41 @@ function addManualFoodToResults() {
     showAlert('Ingresa un valor de calorías válido.', 'warning');
     return;
   }
-
-  manualFoodItems.push({ alimento: name, calorias: Math.round(calories), porcion: '1 porción manual' });
-  renderManualResultsTable();
-  document.getElementById('manual-food-name').value = '';
-  document.getElementById('manual-food-calories').value = '';
-  document.getElementById('manual-food-name')?.focus();
-  showAlert('Alimento agregado a la lista. Guárdalo en el diario cuando termines.', 'success');
-}
-
-async function saveManualResultsToDB() {
-  if (isSavingManual) return;
-
-  const mealType = document.getElementById('manual-meal-type').value;
-  const rawDate = document.getElementById('manual-date').value || getLocalDateString();
-  const itemsToSave = [...manualFoodItems];
-
-  if (itemsToSave.length === 0) {
-    showAlert('No hay alimentos para guardar.', 'warning');
+  if (!mealType || !rawDate) {
+    showAlert('Selecciona el tipo de comida y la fecha.', 'warning');
     return;
   }
 
-  const saveBtn = document.getElementById('btn-save-manual-results');
+  const saveBtn = document.getElementById('btn-add-manual-food');
   isSavingManual = true;
-  if (saveBtn) saveBtn.disabled = true;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+  }
 
   try {
-    const result = await API.guardarComidas(mealType, rawDate, itemsToSave);
+    const result = await API.guardarComidas(mealType, rawDate, [{
+      alimento: name,
+      calorias: Math.round(calories),
+      porcion: '1 porción manual'
+    }]);
+
     if (!result.success) throw new Error(result.error || 'Error desconocido al guardar.');
 
-    showAlert(`¡${result.insertedCount} alimento(s) guardados!`, 'success');
-    manualFoodItems = [];
-    renderManualResultsTable();
-    document.getElementById('manual-food-form')?.reset();
-    document.getElementById('manual-date').value = getLocalDateString();
-    document.getElementById('manual-meal-type').value = 'DESAYUNO';
-    window.location.hash = '#dashboard';
+    showAlert('Alimento guardado en el diario.', 'success');
+    document.getElementById('manual-food-name').value = '';
+    document.getElementById('manual-food-calories').value = '';
+    document.getElementById('manual-food-name')?.focus();
   } catch (error) {
-    console.error('Error guardando alimentos manuales:', error);
-    showAlert('Error al guardar en la base de datos: ' + error.message, 'danger');
+    console.error('Error guardando alimento manual:', error);
+    showAlert('Error al guardar: ' + error.message, 'danger');
   } finally {
     isSavingManual = false;
-    if (saveBtn) saveBtn.disabled = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Guardar';
+    }
   }
-}
-
-function discardManualResults() {
-  manualFoodItems = [];
-  renderManualResultsTable();
-  showAlert('Lista manual descartada.', 'info');
 }
 
 // Cargar y mostrar consultas pendientes a Gemini
@@ -1763,12 +1737,13 @@ document.addEventListener('DOMContentLoaded', () => {
     manualFormButton.addEventListener('click', () => openManualView());
   }
   document.getElementById('btn-back-to-gemini').addEventListener('click', () => window.location.hash = '#agregar');
+  document.getElementById('btn-manual-go-dashboard')?.addEventListener('click', () => {
+    window.location.hash = '#dashboard';
+  });
   document.getElementById('manual-food-form').addEventListener('submit', e => {
     e.preventDefault();
-    addManualFoodToResults();
+    saveManualFoodDirect();
   });
-  document.getElementById('btn-save-manual-results')?.addEventListener('click', saveManualResultsToDB);
-  document.getElementById('btn-cancel-manual-results')?.addEventListener('click', discardManualResults);
   document.getElementById('btn-save-measure')?.addEventListener('click', saveMeasurement);
   document.getElementById('btn-open-measure-modal')?.addEventListener('click', openMeasureModal);
   document.getElementById('btn-open-measure-modal-empty')?.addEventListener('click', openMeasureModal);
@@ -1799,7 +1774,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (menuOverlay) menuOverlay.addEventListener('click', () => closeMenu());
 
   window.addEventListener('offline', () => {
-    notifyBackendOffline('Sin conexión a internet. El backend no está disponible.');
+    notifyBackendOffline('Sin conexión a internet. El servidor no está disponible.');
   });
   window.addEventListener('online', () => {
     checkBackendConnection();
