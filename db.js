@@ -26,13 +26,15 @@ async function initDatabase() {
     // Tabla principal: registro de alimentos consumidos
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS comidas (
-        id          INT AUTO_INCREMENT PRIMARY KEY,
-        comida      ENUM('DESAYUNO','ALMUERZO','CENA','MERIENDA') NOT NULL,
-        fecha       DATE NOT NULL,
-        alimento    VARCHAR(255) NOT NULL,
-        calorias    INT NOT NULL DEFAULT 0,
-        porcion     VARCHAR(100) DEFAULT '1 porción',
-        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        id             INT AUTO_INCREMENT PRIMARY KEY,
+        comida         ENUM('DESAYUNO','ALMUERZO','CENA','MERIENDA') NOT NULL,
+        fecha          DATE NOT NULL,
+        alimento       VARCHAR(255) NOT NULL,
+        calorias       INT NOT NULL DEFAULT 0,
+        porcion        VARCHAR(100) DEFAULT '1 porción',
+        proteina       DECIMAL(8,1) NOT NULL DEFAULT 0,
+        carbohidratos  DECIMAL(8,1) NOT NULL DEFAULT 0,
+        created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_fecha (fecha),
         INDEX idx_comida (comida)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -66,9 +68,39 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Tabla de configuración de la app (modelo Gemini, etc.)
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS configuraciones (
+        clave       VARCHAR(100) PRIMARY KEY,
+        valor       TEXT NOT NULL,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Migración: macros en comidas (bases ya existentes)
+    await ensureColumn(conn, 'comidas', 'proteina', 'DECIMAL(8,1) NOT NULL DEFAULT 0');
+    await ensureColumn(conn, 'comidas', 'carbohidratos', 'DECIMAL(8,1) NOT NULL DEFAULT 0');
+
+    // Valor por defecto del modelo Gemini
+    await conn.execute(`
+      INSERT IGNORE INTO configuraciones (clave, valor) VALUES ('gemini_model', 'gemini-3.5-flash')
+    `);
+
     console.log('✅ Tablas MySQL verificadas/creadas correctamente.');
   } finally {
     conn.release();
+  }
+}
+
+async function ensureColumn(conn, table, column, definition) {
+  const [rows] = await conn.execute(
+    `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]
+  );
+  if (Number(rows[0].c) === 0) {
+    await conn.execute(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+    console.log(`➕ Columna ${table}.${column} agregada.`);
   }
 }
 
@@ -76,13 +108,22 @@ async function initDatabase() {
 
 /**
  * Insertar un registro de alimento.
- * @param {{ comida, fecha, alimento, calorias, porcion }} item
+ * @param {{ comida, fecha, alimento, calorias, porcion, proteina?, carbohidratos? }} item
  * @returns {Promise<number>} ID del registro insertado
  */
 async function addFood(item) {
   const [result] = await pool.execute(
-    'INSERT INTO comidas (comida, fecha, alimento, calorias, porcion) VALUES (?, ?, ?, ?, ?)',
-    [item.comida, item.fecha, item.alimento, item.calorias, item.porcion || '1 porción']
+    `INSERT INTO comidas (comida, fecha, alimento, calorias, porcion, proteina, carbohidratos)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      item.comida,
+      item.fecha,
+      item.alimento,
+      item.calorias,
+      item.porcion || '1 porción',
+      Number(item.proteina || 0),
+      Number(item.carbohidratos || 0)
+    ]
   );
   return result.insertId;
 }
@@ -173,28 +214,62 @@ async function deleteMeasurement(id) {
 }
 
 /**
- * Obtener suma de calorías agrupada por los últimos N días (para gráfico semanal).
+ * Obtener suma de calorías y macros agrupada por fechas.
  * @param {string[]} dates - Array de fechas en formato YYYY-MM-DD
- * @returns {Promise<Object>} Mapa de fecha -> total kcal
+ * @returns {Promise<Object>} Mapa de fecha -> { calorias, proteina, carbohidratos }
  */
 async function getCaloriesSummaryByDates(dates) {
   if (!dates || dates.length === 0) return {};
 
   const placeholders = dates.map(() => '?').join(', ');
   const [rows] = await pool.execute(
-    `SELECT fecha, SUM(calorias) AS total FROM comidas WHERE fecha IN (${placeholders}) GROUP BY fecha`,
+    `SELECT fecha,
+            SUM(calorias) AS total,
+            SUM(proteina) AS proteina,
+            SUM(carbohidratos) AS carbohidratos
+     FROM comidas
+     WHERE fecha IN (${placeholders})
+     GROUP BY fecha`,
     dates
   );
 
-  // Convertir a mapa para acceso rápido
   const map = {};
   rows.forEach(row => {
-    // Normalizar fecha a string YYYY-MM-DD (viene como Date object de mysql2)
     const dateStr = typeof row.fecha === 'string'
       ? row.fecha
       : row.fecha.toISOString().split('T')[0];
-    map[dateStr] = Number(row.total);
+    map[dateStr] = {
+      calorias: Number(row.total || 0),
+      proteina: Number(row.proteina || 0),
+      carbohidratos: Number(row.carbohidratos || 0)
+    };
   });
+  return map;
+}
+
+/**
+ * Obtener / guardar configuración por clave.
+ */
+async function getConfig(clave) {
+  const [rows] = await pool.execute(
+    'SELECT valor FROM configuraciones WHERE clave = ? LIMIT 1',
+    [clave]
+  );
+  return rows.length ? rows[0].valor : null;
+}
+
+async function setConfig(clave, valor) {
+  await pool.execute(
+    `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
+    [clave, String(valor)]
+  );
+}
+
+async function getAllConfig() {
+  const [rows] = await pool.execute('SELECT clave, valor FROM configuraciones');
+  const map = {};
+  rows.forEach(row => { map[row.clave] = row.valor; });
   return map;
 }
 
@@ -334,6 +409,9 @@ module.exports = {
   deleteMeasurement,
   getCaloriesSummaryByDates,
   getStats,
+  getConfig,
+  setConfig,
+  getAllConfig,
   saveGeminiQuery,
   getPendingGeminiQueries,
   getGeminiQueriesByStatus,

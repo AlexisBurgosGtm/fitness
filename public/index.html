@@ -65,6 +65,11 @@
               <i data-lucide="bar-chart-3" class="me-1_5"></i> Reportes
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link d-flex align-items-center" href="#configuraciones" id="nav-configuraciones">
+              <i data-lucide="settings" class="me-1_5"></i> Configuraciones
+            </a>
+          </li>
         </ul>
       </div>
     </div>
@@ -96,6 +101,9 @@
       </a>
       <a class="nav-link menu-link d-flex align-items-center" href="#reportes" id="menu-nav-reportes">
         <i data-lucide="bar-chart-3" class="me-2"></i> Reportes
+      </a>
+      <a class="nav-link menu-link d-flex align-items-center" href="#configuraciones" id="menu-nav-configuraciones">
+        <i data-lucide="settings" class="me-2"></i> Configuraciones
       </a>
     </nav>
   </aside>
@@ -284,7 +292,7 @@
       </div>
 
       <!-- Gráfico mensual de pérdida de grasa -->
-      <div class="row g-4">
+      <div class="row g-4 mb-4">
         <div class="col-12">
           <div class="glass-card p-4">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -296,6 +304,27 @@
             </div>
             <div class="chart-container position-relative" style="height: 280px;">
               <canvas id="fatLossMonthChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfico diario de macros -->
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+              <div>
+                <h4 class="section-title m-0">Proteínas y carbohidratos</h4>
+                <p class="text-muted-custom fs-8 m-0">Estimados diarios de los últimos 7 días (gramos)</p>
+              </div>
+              <div class="d-flex gap-3 fs-8">
+                <span class="text-muted-custom">Hoy · Prot: <strong class="text-white" id="dash-protein-today">0 g</strong></span>
+                <span class="text-muted-custom">Carb: <strong class="text-white" id="dash-carbs-today">0 g</strong></span>
+              </div>
+            </div>
+            <div class="chart-container position-relative" style="height: 280px;">
+              <canvas id="macrosDailyChart"></canvas>
             </div>
           </div>
         </div>
@@ -372,10 +401,7 @@
               <div class="border-top border-secondary pt-4 mb-3 d-flex justify-content-between align-items-center flex-wrap g-2">
                 <div>
                   <h4 class="section-title m-0">Resultados del Análisis</h4>
-                  <p class="text-muted-custom fs-8 m-0" id="gemini-source-badge">Respuestas calculadas por Gemini 1.5 Flash</p>
-                </div>
-                <div class="text-end">
-                  <span class="badge bg-warning text-dark fs-7 px-3 py-2" id="gemini-total-temp">Total: 0 kcal</span>
+                  <p class="text-muted-custom fs-8 m-0" id="gemini-source-badge">Respuestas calculadas por Gemini</p>
                 </div>
               </div>
 
@@ -383,9 +409,11 @@
                 <table class="table table-dark table-hover m-0 align-middle">
                   <thead>
                     <tr>
-                      <th scope="col" style="width: 50%">Alimento</th>
-                      <th scope="col" style="width: 25%">Porción Estimada</th>
-                      <th scope="col" style="width: 25%">Calorías (kcal)</th>
+                      <th scope="col" style="width: 34%">Alimento</th>
+                      <th scope="col" style="width: 18%">Porción</th>
+                      <th scope="col" style="width: 16%">Calorías</th>
+                      <th scope="col" style="width: 16%">Proteína (g)</th>
+                      <th scope="col" style="width: 16%">Carbos (g)</th>
                     </tr>
                   </thead>
                   <tbody id="gemini-results-tbody">
@@ -394,9 +422,12 @@
                 </table>
               </div>
 
-              <div class="form-text text-info mb-4 d-flex align-items-center mt-2">
+              <div class="form-text text-info mb-4 d-flex align-items-center mt-2 flex-wrap gap-2">
                 <i data-lucide="info" class="me-1_5 fs-6"></i>
-                <span class="fs-8">Puedes editar directamente los valores en la tabla si deseas realizar algún ajuste.</span>
+                <span class="fs-8">Puedes editar los valores en la tabla. Totales:</span>
+                <span class="badge bg-warning text-dark fs-8" id="gemini-total-temp">0 kcal</span>
+                <span class="badge bg-info text-dark fs-8" id="gemini-total-protein">0 g prot</span>
+                <span class="badge bg-success text-dark fs-8" id="gemini-total-carbs">0 g carb</span>
               </div>
 
               <!-- Botones Guardar -->
@@ -562,18 +593,20 @@
           <table class="table table-dark table-hover m-0 align-middle">
             <thead>
               <tr>
-                <th scope="col" style="width: 15%">Fecha</th>
-                <th scope="col" style="width: 15%">Comida</th>
-                <th scope="col" style="width: 35%">Alimento</th>
-                <th scope="col" style="width: 15%">Porción</th>
+                <th scope="col" style="width: 12%">Fecha</th>
+                <th scope="col" style="width: 12%">Comida</th>
+                <th scope="col" style="width: 28%">Alimento</th>
+                <th scope="col" style="width: 12%">Porción</th>
                 <th scope="col" style="width: 12%">Calorías</th>
-                <th scope="col" style="width: 8%" class="text-center">Acciones</th>
+                <th scope="col" style="width: 10%">Prot.</th>
+                <th scope="col" style="width: 10%">Carb.</th>
+                <th scope="col" style="width: 4%" class="text-center">Acciones</th>
               </tr>
             </thead>
             <tbody id="history-table-tbody">
               <!-- Se llena con JS -->
               <tr>
-                <td colspan="6" class="text-center py-5 text-muted-custom">
+                <td colspan="8" class="text-center py-5 text-muted-custom">
                   <i data-lucide="database" class="fs-1 mb-2"></i>
                   <p class="m-0">No se encontraron registros en tu historial.</p>
                 </td>
@@ -651,6 +684,58 @@
                 <canvas id="reportFatLossChart"></canvas>
               </div>
             </div>
+          </div>
+          <div class="col-12">
+            <div class="glass-card p-3 p-md-4">
+              <h4 class="section-title mb-3">Proteínas y carbohidratos del mes</h4>
+              <p class="text-muted-custom fs-8 mb-3">Estimados diarios en gramos · Totales:
+                <span class="text-info fw-semibold" id="report-total-protein">0 g prot</span> ·
+                <span class="text-success fw-semibold" id="report-total-carbs">0 g carb</span>
+              </p>
+              <div class="chart-container position-relative" style="height: 300px;">
+                <canvas id="reportMacrosChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: CONFIGURACIONES -->
+    <section id="view-configuraciones" class="spa-view">
+      <div class="row justify-content-center">
+        <div class="col-lg-8 col-12">
+          <div class="glass-card p-4 md-p-5">
+            <div class="d-flex align-items-center mb-4">
+              <div class="icon-box bg-info-glow me-3">
+                <i data-lucide="settings" class="text-info"></i>
+              </div>
+              <div>
+                <h2 class="section-title m-0">Configuraciones</h2>
+                <p class="text-muted-custom m-0">Preferencias de la aplicación y del modelo de IA.</p>
+              </div>
+            </div>
+
+            <form id="settings-form" class="row g-4">
+              <div class="col-12">
+                <label for="settings-gemini-model" class="form-label text-muted-custom">Modelo de Gemini</label>
+                <select id="settings-gemini-model" class="form-select glass-input text-white"></select>
+                <div class="form-text text-muted-custom fs-8 mt-2">
+                  Este modelo se usará en las consultas de nutrición. Por defecto: Gemini 3.5 Flash.
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="stat-box rounded-3 p-3">
+                  <div class="text-muted-custom fs-8 text-uppercase mb-1">Modelo activo</div>
+                  <div class="fw-semibold text-white" id="settings-active-model-label">gemini-3.5-flash</div>
+                </div>
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-info px-4" id="btn-save-settings">
+                  <i data-lucide="save" class="me-1"></i> Guardar configuración
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>

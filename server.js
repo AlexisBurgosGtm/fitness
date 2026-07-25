@@ -35,54 +35,134 @@ if (apiKey && apiKey !== 'tu_api_key_aqui' && apiKey.trim() !== '') {
 
 // ─── ENDPOINTS: GEMINI / NUTRITION ──────────────────────────────────────────
 
-// POST /api/nutrition — Consultar calorías de alimentos vía Gemini
+// Modelos Gemini permitidos en la app
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+const GEMINI_MODELS = [
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (recomendado)' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+  { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+];
+
+function resolveGeminiModel(requested) {
+  const allowed = new Set(GEMINI_MODELS.map(m => m.id));
+  if (requested && allowed.has(requested)) return requested;
+  return DEFAULT_GEMINI_MODEL;
+}
+
+const NUTRITION_SYSTEM_PROMPT = `Eres un experto en nutrición y dietética. Tu tarea es analizar la consulta del usuario sobre alimentos consumidos y devolver un listado detallado en formato JSON estructurado.
+Debes identificar cada alimento o plato mencionado, estimar su tamaño de porción estándar (o la porción especificada por el usuario), estimar su contenido calórico en kilocalorías (kcal), y estimar proteínas y carbohidratos en gramos.
+
+La respuesta DEBE ser estrictamente un arreglo de objetos JSON con el siguiente formato:
+[
+  {
+    "alimento": "Nombre del alimento (ej. Manzana, Huevo frito, etc.)",
+    "calorias": 120,
+    "proteina": 5.2,
+    "carbohidratos": 18.0,
+    "porcion": "1 unidad mediana, 100g, 1 taza, etc."
+  }
+]
+No agregues texto introductorio ni explicaciones. Responde únicamente el arreglo JSON.`;
+
+// POST /api/nutrition — Consultar calorías y macros de alimentos vía Gemini
 app.post('/api/nutrition', async (req, res) => {
-  const { query } = req.body;
+  const { query, model: requestedModel } = req.body;
 
   if (!query || query.trim() === '') {
     return res.status(400).json({ error: 'La consulta no puede estar vacía.' });
   }
 
+  let modelName = resolveGeminiModel(requestedModel);
+  try {
+    const savedModel = await db.getConfig('gemini_model');
+    if (!requestedModel && savedModel) modelName = resolveGeminiModel(savedModel);
+  } catch (_) { /* usa default */ }
+
   if (!genAI) {
-    console.log(`[MOCK] Procesando consulta: "${query}"`);
+    console.log(`[MOCK] Procesando consulta con modelo ${modelName}: "${query}"`);
     return res.json({
       data: generateMockNutrition(query),
       isMock: true,
+      model: modelName,
       message: 'Mostrando datos simulados. Configura tu GEMINI_API_KEY en .env para usar IA real.'
     });
   }
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-3.5-flash',
-      systemInstruction: `Eres un experto en nutrición y dietética. Tu tarea es analizar la consulta del usuario sobre alimentos consumidos y devolver un listado detallado en formato JSON estructurado. 
-      Debes identificar cada alimento o plato mencionado, estimar su tamaño de porción estándar (o la porción especificada por el usuario) y estimar su contenido calórico en kilocalorías (kcal).
-      
-      La respuesta DEBE ser estrictamente un arreglo de objetos JSON con el siguiente formato:
-      [
-        {
-          "alimento": "Nombre del alimento (ej. Manzana, Huevo frito, etc.)",
-          "calorias": 120,
-          "porcion": "1 unidad mediana, 100g, 1 taza, etc."
-        }
-      ]
-      No agregues texto introductorio ni explicaciones. Responde únicamente el arreglo JSON.`,
+      model: modelName,
+      systemInstruction: NUTRITION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: 'application/json' }
     });
 
     const response = await model.generateContent(query);
     const responseText = response.response.text();
-    console.log('Gemini raw response:', responseText);
+    console.log(`Gemini (${modelName}) raw response:`, responseText);
 
     const parsedData = JSON.parse(responseText);
-    res.json({ data: parsedData, isMock: false });
+    const normalized = (Array.isArray(parsedData) ? parsedData : []).map(item => ({
+      alimento: item.alimento || 'Alimento',
+      calorias: Number(item.calorias || 0),
+      proteina: Number(item.proteina || item.proteinas || 0),
+      carbohidratos: Number(item.carbohidratos || item.carbs || 0),
+      porcion: item.porcion || '1 porción'
+    }));
+
+    res.json({ data: normalized, isMock: false, model: modelName });
 
   } catch (error) {
     console.error('❌ Error al consultar Gemini API:', error);
     res.status(500).json({
       error: 'Error al consultar el servicio de Inteligencia Artificial.',
-      details: error.message || 'Gemini no pudo procesar la consulta.'
+      details: error.message || 'Gemini no pudo procesar la consulta.',
+      model: modelName
     });
+  }
+});
+
+// GET /api/gemini-models — Lista de modelos disponibles
+app.get('/api/gemini-models', (req, res) => {
+  res.json({ data: GEMINI_MODELS, default: DEFAULT_GEMINI_MODEL });
+});
+
+// GET /api/config — Configuración actual
+app.get('/api/config', async (req, res) => {
+  try {
+    const config = await db.getAllConfig();
+    res.json({
+      data: {
+        gemini_model: resolveGeminiModel(config.gemini_model || DEFAULT_GEMINI_MODEL)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo configuración:', error);
+    res.status(500).json({ error: 'Error al obtener la configuración.', details: error.message });
+  }
+});
+
+// PUT /api/config — Actualizar configuración
+app.put('/api/config', async (req, res) => {
+  try {
+    const { gemini_model } = req.body || {};
+    if (gemini_model) {
+      const model = resolveGeminiModel(gemini_model);
+      if (gemini_model !== model) {
+        return res.status(400).json({ error: 'Modelo de Gemini no permitido.' });
+      }
+      await db.setConfig('gemini_model', model);
+    }
+    const config = await db.getAllConfig();
+    res.json({
+      success: true,
+      data: {
+        gemini_model: resolveGeminiModel(config.gemini_model || DEFAULT_GEMINI_MODEL)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error guardando configuración:', error);
+    res.status(500).json({ error: 'Error al guardar la configuración.', details: error.message });
   }
 });
 
@@ -104,7 +184,9 @@ app.post('/api/comidas', async (req, res) => {
         fecha,
         alimento: item.alimento,
         calorias: Number(item.calorias || 0),
-        porcion: item.porcion || '1 porción'
+        porcion: item.porcion || '1 porción',
+        proteina: Number(item.proteina || 0),
+        carbohidratos: Number(item.carbohidratos || 0)
       });
       insertedIds.push(id);
     }
@@ -361,25 +443,31 @@ function generateMockNutrition(query) {
   const queryLower = query.toLowerCase();
   const results = [];
   const dictionary = [
-    { keywords: ['huevo', 'huevos'], alimento: 'Huevo entero', calorias: 70, porcion: '1 unidad' },
-    { keywords: ['pan', 'tostada', 'tostadas'], alimento: 'Pan integral tostado', calorias: 80, porcion: '1 rebanada' },
-    { keywords: ['café', 'cafe'], alimento: 'Café negro sin azúcar', calorias: 2, porcion: '1 taza (200ml)' },
-    { keywords: ['leche'], alimento: 'Leche entera', calorias: 120, porcion: '1 vaso (200ml)' },
-    { keywords: ['manzana', 'manzanas'], alimento: 'Manzana roja', calorias: 95, porcion: '1 unidad mediana' },
-    { keywords: ['platano', 'plátano', 'banano'], alimento: 'Plátano', calorias: 105, porcion: '1 unidad mediana' },
-    { keywords: ['arroz'], alimento: 'Arroz blanco cocido', calorias: 130, porcion: '100g' },
-    { keywords: ['pollo', 'pechuga'], alimento: 'Pechuga de pollo a la plancha', calorias: 165, porcion: '100g' },
-    { keywords: ['aguacate', 'palta'], alimento: 'Aguacate', calorias: 160, porcion: '100g' },
-    { keywords: ['ensalada'], alimento: 'Ensalada mixta', calorias: 45, porcion: '1 plato' },
-    { keywords: ['carne', 'bife', 'filete'], alimento: 'Filete de ternera a la plancha', calorias: 200, porcion: '100g' },
-    { keywords: ['avena'], alimento: 'Avena en hojuelas', calorias: 150, porcion: '40g' },
-    { keywords: ['yogur', 'yogurt'], alimento: 'Yogur natural sin azúcar', calorias: 60, porcion: '1 vaso (125g)' }
+    { keywords: ['huevo', 'huevos'], alimento: 'Huevo entero', calorias: 70, proteina: 6.3, carbohidratos: 0.4, porcion: '1 unidad' },
+    { keywords: ['pan', 'tostada', 'tostadas'], alimento: 'Pan integral tostado', calorias: 80, proteina: 3.5, carbohidratos: 14, porcion: '1 rebanada' },
+    { keywords: ['café', 'cafe'], alimento: 'Café negro sin azúcar', calorias: 2, proteina: 0.1, carbohidratos: 0, porcion: '1 taza (200ml)' },
+    { keywords: ['leche'], alimento: 'Leche entera', calorias: 120, proteina: 6.4, carbohidratos: 9.5, porcion: '1 vaso (200ml)' },
+    { keywords: ['manzana', 'manzanas'], alimento: 'Manzana roja', calorias: 95, proteina: 0.5, carbohidratos: 25, porcion: '1 unidad mediana' },
+    { keywords: ['platano', 'plátano', 'banano'], alimento: 'Plátano', calorias: 105, proteina: 1.3, carbohidratos: 27, porcion: '1 unidad mediana' },
+    { keywords: ['arroz'], alimento: 'Arroz blanco cocido', calorias: 130, proteina: 2.7, carbohidratos: 28, porcion: '100g' },
+    { keywords: ['pollo', 'pechuga'], alimento: 'Pechuga de pollo a la plancha', calorias: 165, proteina: 31, carbohidratos: 0, porcion: '100g' },
+    { keywords: ['aguacate', 'palta'], alimento: 'Aguacate', calorias: 160, proteina: 2, carbohidratos: 8.5, porcion: '100g' },
+    { keywords: ['ensalada'], alimento: 'Ensalada mixta', calorias: 45, proteina: 2, carbohidratos: 7, porcion: '1 plato' },
+    { keywords: ['carne', 'bife', 'filete'], alimento: 'Filete de ternera a la plancha', calorias: 200, proteina: 26, carbohidratos: 0, porcion: '100g' },
+    { keywords: ['avena'], alimento: 'Avena en hojuelas', calorias: 150, proteina: 5.5, carbohidratos: 27, porcion: '40g' },
+    { keywords: ['yogur', 'yogurt'], alimento: 'Yogur natural sin azúcar', calorias: 60, proteina: 5, carbohidratos: 6, porcion: '1 vaso (125g)' }
   ];
 
   let matched = false;
   dictionary.forEach(item => {
     if (item.keywords.some(k => queryLower.includes(k))) {
-      results.push({ alimento: item.alimento, calorias: item.calorias, porcion: item.porcion });
+      results.push({
+        alimento: item.alimento,
+        calorias: item.calorias,
+        proteina: item.proteina,
+        carbohidratos: item.carbohidratos,
+        porcion: item.porcion
+      });
       matched = true;
     }
   });
@@ -389,13 +477,19 @@ function generateMockNutrition(query) {
       const name = segment.trim();
       if (name.length > 2) {
         const hash = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        results.push({ alimento: name.charAt(0).toUpperCase() + name.slice(1), calorias: 50 + (hash % 250), porcion: '1 porción estimada' });
+        results.push({
+          alimento: name.charAt(0).toUpperCase() + name.slice(1),
+          calorias: 50 + (hash % 250),
+          proteina: 2 + (hash % 20),
+          carbohidratos: 5 + (hash % 30),
+          porcion: '1 porción estimada'
+        });
       }
     });
   }
 
   if (results.length === 0) {
-    results.push({ alimento: query, calorias: 150, porcion: '1 porción' });
+    results.push({ alimento: query, calorias: 150, proteina: 8, carbohidratos: 15, porcion: '1 porción' });
   }
 
   return results;

@@ -66,8 +66,20 @@ const API = {
   },
 
   // Gemini: consultar calorías de alimentos
-  consultarNutricion(query) {
-    return this.post('/api/nutrition', { query });
+  consultarNutricion(query, model) {
+    return this.post('/api/nutrition', { query, model });
+  },
+
+  getGeminiModels() {
+    return this.get('/api/gemini-models');
+  },
+
+  getConfig() {
+    return this.get('/api/config');
+  },
+
+  saveConfig(data) {
+    return this.put('/api/config', data);
   },
 
   // Gemini: guardar consulta pendiente (recuperación ante fallos)
@@ -158,8 +170,10 @@ const API = {
 // 2. CONSTANTES Y CONFIGURACIÓN GLOBAL
 let caloriesChart = null;
 let fatLossMonthChart = null;
+let macrosDailyChart = null;
 let reportCaloriesChart = null;
 let reportFatLossChart = null;
+let reportMacrosChart = null;
 let measurementsChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
@@ -177,6 +191,26 @@ let measuresActiveGroup = 'TODOS';
 
 /** ~3500 kcal de déficit ≈ 1 lb de grasa */
 const KCAL_PER_LB_FAT = 3500;
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+const LS_GEMINI_MODEL = 'auraGeminiModel';
+
+function getGeminiModel() {
+  return localStorage.getItem(LS_GEMINI_MODEL) || DEFAULT_GEMINI_MODEL;
+}
+
+function setGeminiModel(model) {
+  localStorage.setItem(LS_GEMINI_MODEL, model || DEFAULT_GEMINI_MODEL);
+}
+
+function normalizeDaySummary(entry) {
+  if (entry == null) return { calorias: 0, proteina: 0, carbohidratos: 0 };
+  if (typeof entry === 'number') return { calorias: entry, proteina: 0, carbohidratos: 0 };
+  return {
+    calorias: Number(entry.calorias || 0),
+    proteina: Number(entry.proteina || 0),
+    carbohidratos: Number(entry.carbohidratos || 0)
+  };
+}
 
 const MEASURE_TYPE_ORDER = [
   'ABDOMEN BAJO',
@@ -412,6 +446,7 @@ function initRouter() {
     else if (cleanId === 'historial') loadHistorial();
     else if (cleanId === 'medidas') loadMedidas();
     else if (cleanId === 'reportes') loadReportes();
+    else if (cleanId === 'configuraciones') loadConfiguraciones();
     else if (cleanId === 'agregar') resetQueryForm();
     else if (cleanId === 'manual') {
       toggleManualFoodForm(true);
@@ -438,6 +473,7 @@ function triggerViewLoad(viewId) {
   else if (viewId === 'historial') loadHistorial();
   else if (viewId === 'medidas') loadMedidas();
   else if (viewId === 'reportes') loadReportes();
+  else if (viewId === 'configuraciones') loadConfiguraciones();
   else if (viewId === 'agregar') resetQueryForm();
 }
 
@@ -473,6 +509,17 @@ async function loadDashboard() {
     document.getElementById('dash-meal-almuerzo').textContent  = `${lunchSum} kcal`;
     document.getElementById('dash-meal-cena').textContent      = `${dinnerSum} kcal`;
     document.getElementById('dash-meal-merienda').textContent  = `${snackSum} kcal`;
+
+    let proteinToday = 0;
+    let carbsToday = 0;
+    items.forEach(item => {
+      proteinToday += Number(item.proteina || 0);
+      carbsToday += Number(item.carbohidratos || 0);
+    });
+    const protEl = document.getElementById('dash-protein-today');
+    const carbsEl = document.getElementById('dash-carbs-today');
+    if (protEl) protEl.textContent = `${proteinToday.toFixed(1)} g`;
+    if (carbsEl) carbsEl.textContent = `${carbsToday.toFixed(1)} g`;
 
     const progressPct = target > 0 ? Math.round((totalConsumed / target) * 100) : 0;
     const maxProgressPct = maxCalories > 0 ? Math.round((totalConsumed / maxCalories) * 100) : 0;
@@ -666,7 +713,8 @@ async function updateDashboardAnalytics(referenceDateStr) {
 
   // Deuda calórica: excedente vs ideal sumado (últimos 7 días)
   const debt = weekDates.reduce((sum, date) => {
-    return sum + calcDailySurplus(summaryMap[date] || 0, ideal);
+    const day = normalizeDaySummary(summaryMap[date]);
+    return sum + calcDailySurplus(day.calorias, ideal);
   }, 0);
   const debtEl = document.getElementById('dash-calorie-debt');
   if (debtEl) {
@@ -674,9 +722,10 @@ async function updateDashboardAnalytics(referenceDateStr) {
   }
 
   // Pérdida de grasa del mes (déficit vs máximo por día)
-  const monthFatByDay = monthDates.map(date =>
-    estimateFatLossLbs(calcDailyDeficitFromMax(summaryMap[date] || 0, maxCalories))
-  );
+  const monthFatByDay = monthDates.map(date => {
+    const day = normalizeDaySummary(summaryMap[date]);
+    return estimateFatLossLbs(calcDailyDeficitFromMax(day.calorias, maxCalories));
+  });
   const monthFatTotal = monthFatByDay.reduce((a, b) => a + b, 0);
   const monthFatEl = document.getElementById('dash-fat-loss-month');
   if (monthFatEl) monthFatEl.textContent = `${formatFatLbs(monthFatTotal)} lb`;
@@ -684,7 +733,9 @@ async function updateDashboardAnalytics(referenceDateStr) {
   if (monthBadge) monthBadge.textContent = `${formatFatLbs(monthFatTotal)} lb este mes`;
 
   // Gráfico semanal de calorías
-  const calorieSums = weekDates.map(d => summaryMap[d] || 0);
+  const calorieSums = weekDates.map(d => normalizeDaySummary(summaryMap[d]).calorias);
+  const proteinSums = weekDates.map(d => normalizeDaySummary(summaryMap[d]).proteina);
+  const carbsSums = weekDates.map(d => normalizeDaySummary(summaryMap[d]).carbohidratos);
   const weekCtx = document.getElementById('caloriesChart')?.getContext('2d');
   if (weekCtx) {
     if (caloriesChart) caloriesChart.destroy();
@@ -790,6 +841,67 @@ async function updateDashboardAnalytics(referenceDateStr) {
       }
     });
   }
+
+  // Gráfico de proteínas / carbohidratos (últimos 7 días)
+  const macrosCtx = document.getElementById('macrosDailyChart')?.getContext('2d');
+  if (macrosCtx) {
+    if (macrosDailyChart) macrosDailyChart.destroy();
+    macrosDailyChart = new Chart(macrosCtx, {
+      type: 'bar',
+      data: {
+        labels: weekLabels,
+        datasets: [
+          {
+            label: 'Proteína (g)',
+            data: proteinSums.map(v => Number(v.toFixed(1))),
+            backgroundColor: 'rgba(56, 189, 248, 0.85)',
+            borderColor: 'rgba(56, 189, 248, 1)',
+            borderWidth: 1,
+            borderRadius: 6,
+            borderSkipped: false
+          },
+          {
+            label: 'Carbohidratos (g)',
+            data: carbsSums.map(v => Number(v.toFixed(1))),
+            backgroundColor: 'rgba(34, 197, 94, 0.75)',
+            borderColor: 'rgba(34, 197, 94, 1)',
+            borderWidth: 1,
+            borderRadius: 6,
+            borderSkipped: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: '#d7dce5', usePointStyle: true, pointStyle: 'rectRounded' }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(19, 21, 38, 0.95)',
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y} g`
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: {
+              color: '#8e95b3',
+              callback: value => `${value} g`
+            }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#8e95b3' }
+          }
+        }
+      }
+    });
+  }
 }
 
 // Alias por compatibilidad
@@ -849,18 +961,27 @@ async function loadReportes() {
 
   try {
     const summaryMap = await fetchCaloriesByDates(dates);
-    const calorieData = dates.map(d => summaryMap[d] || 0);
+    const daySummaries = dates.map(d => normalizeDaySummary(summaryMap[d]));
+    const calorieData = daySummaries.map(d => d.calorias);
+    const proteinData = daySummaries.map(d => d.proteina);
+    const carbsData = daySummaries.map(d => d.carbohidratos);
     const fatData = calorieData.map(kcal => estimateFatLossLbs(calcDailyDeficitFromMax(kcal, maxCalories)));
     const totalCalories = calorieData.reduce((a, b) => a + b, 0);
+    const totalProtein = proteinData.reduce((a, b) => a + b, 0);
+    const totalCarbs = carbsData.reduce((a, b) => a + b, 0);
     const monthDebt = calorieData.reduce((sum, kcal) => sum + calcDailySurplus(kcal, ideal), 0);
     const monthFat = fatData.reduce((a, b) => a + b, 0);
 
     const totalEl = document.getElementById('report-total-calories');
     const debtEl = document.getElementById('report-month-debt');
     const fatEl = document.getElementById('report-month-fat-loss');
+    const reportProtEl = document.getElementById('report-total-protein');
+    const reportCarbsEl = document.getElementById('report-total-carbs');
     if (totalEl) totalEl.textContent = `${Math.round(totalCalories)} kcal`;
     if (debtEl) debtEl.textContent = `${Math.round(monthDebt)} kcal`;
     if (fatEl) fatEl.textContent = `${formatFatLbs(monthFat)} lb`;
+    if (reportProtEl) reportProtEl.textContent = `${totalProtein.toFixed(1)} g prot`;
+    if (reportCarbsEl) reportCarbsEl.textContent = `${totalCarbs.toFixed(1)} g carb`;
 
     const dayLabels = dates.map(date => String(Number(date.split('-')[2])));
 
@@ -962,9 +1083,148 @@ async function loadReportes() {
         }
       });
     }
+
+    const macrosCtx = document.getElementById('reportMacrosChart')?.getContext('2d');
+    if (macrosCtx) {
+      if (reportMacrosChart) reportMacrosChart.destroy();
+      reportMacrosChart = new Chart(macrosCtx, {
+        type: 'bar',
+        data: {
+          labels: dayLabels,
+          datasets: [
+            {
+              label: 'Proteína (g)',
+              data: proteinData.map(v => Number(v.toFixed(1))),
+              backgroundColor: 'rgba(56, 189, 248, 0.85)',
+              borderColor: 'rgba(56, 189, 248, 1)',
+              borderWidth: 1,
+              borderRadius: 4,
+              borderSkipped: false
+            },
+            {
+              label: 'Carbohidratos (g)',
+              data: carbsData.map(v => Number(v.toFixed(1))),
+              backgroundColor: 'rgba(34, 197, 94, 0.75)',
+              borderColor: 'rgba(34, 197, 94, 1)',
+              borderWidth: 1,
+              borderRadius: 4,
+              borderSkipped: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#d7dce5', usePointStyle: true, pointStyle: 'rectRounded' }
+            },
+            tooltip: {
+              callbacks: {
+                title: items => `Día ${items[0]?.label}`,
+                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y} g`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                color: '#8e95b3',
+                callback: value => `${value} g`
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#8e95b3', maxRotation: 0 }
+            }
+          }
+        }
+      });
+    }
   } catch (error) {
     console.error('Error cargando reportes:', error);
     showAlert('No se pudieron cargar los reportes.', 'danger');
+  }
+}
+
+// ── CONFIGURACIONES ──
+async function loadConfiguraciones() {
+  const select = document.getElementById('settings-gemini-model');
+  const label = document.getElementById('settings-active-model-label');
+  if (!select) return;
+
+  try {
+    const [modelsRes, configRes] = await Promise.all([
+      API.getGeminiModels().catch(() => ({ data: [], default: DEFAULT_GEMINI_MODEL })),
+      API.getConfig().catch(() => ({ data: {} }))
+    ]);
+
+    const models = modelsRes.data?.length
+      ? modelsRes.data
+      : [
+          { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (recomendado)' },
+          { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+          { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+          { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+        ];
+
+    const serverModel = configRes.data?.gemini_model;
+    const activeModel = serverModel || getGeminiModel() || modelsRes.default || DEFAULT_GEMINI_MODEL;
+    setGeminiModel(activeModel);
+
+    select.innerHTML = '';
+    models.forEach(model => {
+      const opt = document.createElement('option');
+      opt.value = model.id;
+      opt.textContent = model.label || model.id;
+      if (model.id === activeModel) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    if (label) label.textContent = activeModel;
+    lucide.createIcons();
+  } catch (error) {
+    console.error('Error cargando configuraciones:', error);
+    showAlert('No se pudieron cargar las configuraciones.', 'danger');
+  }
+}
+
+async function saveConfiguraciones(e) {
+  e.preventDefault();
+  const select = document.getElementById('settings-gemini-model');
+  const label = document.getElementById('settings-active-model-label');
+  const saveBtn = document.getElementById('btn-save-settings');
+  if (!select) return;
+
+  const model = select.value || DEFAULT_GEMINI_MODEL;
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    await API.saveConfig({ gemini_model: model });
+    setGeminiModel(model);
+    if (label) label.textContent = model;
+    showAlert('Configuración guardada. Las próximas consultas usarán este modelo.', 'success');
+  } catch (error) {
+    console.error('Error guardando configuración:', error);
+    // Persistir localmente aunque falle el servidor
+    setGeminiModel(model);
+    if (label) label.textContent = model;
+    showAlert('Guardado localmente. No se pudo sincronizar con el servidor: ' + error.message, 'warning');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function syncGeminiModelFromServer() {
+  try {
+    const configRes = await API.getConfig();
+    const model = configRes.data?.gemini_model;
+    if (model) setGeminiModel(model);
+  } catch (_) {
+    // Mantener valor local
   }
 }
 
@@ -999,14 +1259,20 @@ async function handleGeminiQuery(e) {
   submitBtn.disabled = true;
 
   try {
-    const result = await API.consultarNutricion(queryText);
+    const result = await API.consultarNutricion(queryText, getGeminiModel());
 
     if (!result || !Array.isArray(result.data) || result.data.length === 0) {
       const errMsg = result?.error || result?.details || 'Respuesta inválida del servidor.';
       throw new Error(errMsg);
     }
 
-    tempAnalysisResults = result.data;
+    tempAnalysisResults = result.data.map(item => ({
+      alimento: item.alimento || '',
+      calorias: Number(item.calorias || 0),
+      proteina: Number(item.proteina || 0),
+      carbohidratos: Number(item.carbohidratos || 0),
+      porcion: item.porcion || '1 porción'
+    }));
 
     // Guardar la consulta exitosa en la BD
     const saveResult = await API.guardarConsultaGemini(
@@ -1018,12 +1284,13 @@ async function handleGeminiQuery(e) {
     currentGeminiQueryId = saveResult.id;
 
     const sourceBadge = document.getElementById('gemini-source-badge');
+    const modelUsed = result.model || getGeminiModel();
     if (result.isMock) {
       sourceBadge.textContent = result.message || 'Mostrando estimaciones simuladas.';
       sourceBadge.className = 'text-warning fs-8 m-0';
-      showAlert('Se están utilizando datos simulados de calorías.', 'warning');
+      showAlert('Se están utilizando datos simulados de calorías y macros.', 'warning');
     } else {
-      sourceBadge.textContent = 'Respuestas calculadas por Gemini 3.5 Flash';
+      sourceBadge.textContent = `Respuestas calculadas por ${modelUsed}`;
       sourceBadge.className = 'text-muted-custom fs-8 m-0';
       showAlert('¡Gemini analizó tu comida correctamente!', 'success');
     }
@@ -1061,27 +1328,41 @@ async function guardarConsultaGeminiLocal(queryText, gemini_response, status, er
 function renderTempResultsTable() {
   const tbody      = document.getElementById('gemini-results-tbody');
   const totalBadge = document.getElementById('gemini-total-temp');
+  const proteinBadge = document.getElementById('gemini-total-protein');
+  const carbsBadge = document.getElementById('gemini-total-carbs');
   tbody.innerHTML  = '';
 
   if (!tempAnalysisResults || tempAnalysisResults.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" class="text-center">No se encontraron resultados. Intente reescribir.</td></tr>`;
-    totalBadge.textContent = 'Total: 0 kcal';
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center">No se encontraron resultados. Intente reescribir.</td></tr>`;
+    if (totalBadge) totalBadge.textContent = '0 kcal';
+    if (proteinBadge) proteinBadge.textContent = '0 g prot';
+    if (carbsBadge) carbsBadge.textContent = '0 g carb';
     return;
   }
 
   let totalKcal = 0;
+  let totalProtein = 0;
+  let totalCarbs = 0;
   tempAnalysisResults.forEach((item, index) => {
     const kcal = Math.round(Number(item.calorias || 0));
+    const protein = Number(item.proteina || 0);
+    const carbs = Number(item.carbohidratos || 0);
     totalKcal += kcal;
+    totalProtein += protein;
+    totalCarbs += carbs;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td data-label="Alimento"><div contenteditable="true" class="editable-cell text-white" data-index="${index}" data-field="alimento">${item.alimento || ''}</div></td>
-      <td data-label="Porción Estimada"><div contenteditable="true" class="editable-cell text-muted-custom" data-index="${index}" data-field="porcion">${item.porcion || '1 porción'}</div></td>
-      <td data-label="Calorías (kcal)"><div contenteditable="true" class="editable-cell fw-semibold text-warning" data-index="${index}" data-field="calorias">${kcal}</div></td>`;
+      <td data-label="Porción"><div contenteditable="true" class="editable-cell text-muted-custom" data-index="${index}" data-field="porcion">${item.porcion || '1 porción'}</div></td>
+      <td data-label="Calorías"><div contenteditable="true" class="editable-cell fw-semibold text-warning" data-index="${index}" data-field="calorias">${kcal}</div></td>
+      <td data-label="Proteína"><div contenteditable="true" class="editable-cell text-info" data-index="${index}" data-field="proteina">${protein.toFixed(1)}</div></td>
+      <td data-label="Carbos"><div contenteditable="true" class="editable-cell text-success" data-index="${index}" data-field="carbohidratos">${carbs.toFixed(1)}</div></td>`;
     tbody.appendChild(tr);
   });
 
-  totalBadge.textContent = `Total: ${totalKcal} kcal`;
+  if (totalBadge) totalBadge.textContent = `${totalKcal} kcal`;
+  if (proteinBadge) proteinBadge.textContent = `${totalProtein.toFixed(1)} g prot`;
+  if (carbsBadge) carbsBadge.textContent = `${totalCarbs.toFixed(1)} g carb`;
   document.getElementById('gemini-results-container').classList.remove('d-none');
 
   tbody.querySelectorAll('.editable-cell').forEach(cell => {
@@ -1089,14 +1370,17 @@ function renderTempResultsTable() {
       const idx   = parseInt(e.target.dataset.index, 10);
       const field = e.target.dataset.field;
       const val   = e.target.textContent.trim();
-      if (field === 'calorias') {
-        const num = parseInt(val, 10);
+      if (field === 'calorias' || field === 'proteina' || field === 'carbohidratos') {
+        const num = Number(val);
         if (isNaN(num) || num < 0) {
-          showAlert('Las calorías deben ser un número positivo.', 'warning');
-          e.target.textContent = tempAnalysisResults[idx].calorias;
+          showAlert('El valor debe ser un número positivo.', 'warning');
+          e.target.textContent = field === 'calorias'
+            ? tempAnalysisResults[idx][field]
+            : Number(tempAnalysisResults[idx][field] || 0).toFixed(1);
           return;
         }
-        tempAnalysisResults[idx].calorias = num;
+        tempAnalysisResults[idx][field] = field === 'calorias' ? Math.round(num) : Number(num.toFixed(1));
+        if (field !== 'calorias') e.target.textContent = Number(tempAnalysisResults[idx][field]).toFixed(1);
       } else {
         tempAnalysisResults[idx][field] = val;
       }
@@ -1108,7 +1392,14 @@ function renderTempResultsTable() {
 
 function recalculateTempTotal() {
   const total = tempAnalysisResults.reduce((s, item) => s + Number(item.calorias || 0), 0);
-  document.getElementById('gemini-total-temp').textContent = `Total: ${total} kcal`;
+  const protein = tempAnalysisResults.reduce((s, item) => s + Number(item.proteina || 0), 0);
+  const carbs = tempAnalysisResults.reduce((s, item) => s + Number(item.carbohidratos || 0), 0);
+  const totalBadge = document.getElementById('gemini-total-temp');
+  const proteinBadge = document.getElementById('gemini-total-protein');
+  const carbsBadge = document.getElementById('gemini-total-carbs');
+  if (totalBadge) totalBadge.textContent = `${total} kcal`;
+  if (proteinBadge) proteinBadge.textContent = `${protein.toFixed(1)} g prot`;
+  if (carbsBadge) carbsBadge.textContent = `${carbs.toFixed(1)} g carb`;
 }
 
 // Guardar en MySQL
@@ -1563,7 +1854,7 @@ async function loadHistorial() {
   const countBadge  = document.getElementById('history-count');
 
   tbody.innerHTML = `
-    <tr><td colspan="6" class="text-center py-4">
+    <tr><td colspan="8" class="text-center py-4">
       <div class="spinner-border spinner-border-sm text-warning me-2"></div>
       <span class="text-muted-custom">Cargando historial...</span>
     </td></tr>`;
@@ -1577,7 +1868,7 @@ async function loadHistorial() {
 
     if (items.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="6" class="text-center py-5 text-muted-custom">
+        <tr><td colspan="8" class="text-center py-5 text-muted-custom">
           <i data-lucide="database" class="fs-1 mb-2"></i>
           <p class="m-0">No se encontraron registros.</p>
         </td></tr>`;
@@ -1598,6 +1889,8 @@ async function loadHistorial() {
         <td data-label="Alimento" class="fw-semibold text-white fs-7">${item.alimento}</td>
         <td data-label="Porción" class="text-muted-custom fs-7">${item.porcion}</td>
         <td data-label="Calorías"><span class="badge bg-dark border border-secondary text-warning fs-7">${item.calorias} kcal</span></td>
+        <td data-label="Proteína" class="text-info fs-7">${Number(item.proteina || 0).toFixed(1)} g</td>
+        <td data-label="Carbos" class="text-success fs-7">${Number(item.carbohidratos || 0).toFixed(1)} g</td>
         <td data-label="Acciones" class="text-center">
           <button class="btn btn-glass-icon btn-sm px-2 text-danger" onclick="deleteHistoryItem(${item.id})" title="Eliminar registro">
             <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
@@ -1656,6 +1949,7 @@ document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   initRouter();
   checkBackendConnection();
+  syncGeminiModelFromServer();
 
   bootstrapTargetModal = new bootstrap.Modal(document.getElementById('modalTargetCalories'));
   bootstrapMaxModal = new bootstrap.Modal(document.getElementById('modalMaxCalories'));
@@ -1763,6 +2057,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initReportSelectors();
   document.getElementById('report-month')?.addEventListener('change', loadReportes);
   document.getElementById('report-year')?.addEventListener('change', loadReportes);
+  document.getElementById('settings-form')?.addEventListener('submit', saveConfiguraciones);
 
   document.getElementById('btn-delete-all-db').addEventListener('click', deleteAllHistory);
 
