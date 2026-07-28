@@ -167,6 +167,19 @@
                 <div id="dash-progress-bar-max" class="progress-bar bg-gradient-max" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
               </div>
             </div>
+            <div class="progress-bar-container mt-3">
+              <div class="d-flex justify-content-between text-muted-custom fs-7 mb-1">
+                <span>Objetivo Proteínas: <span id="dash-protein-target-val">200</span> g</span>
+                <span id="dash-protein-pct">0%</span>
+              </div>
+              <div class="progress progress-custom progress-custom-protein">
+                <div id="dash-progress-bar-protein" class="progress-bar bg-gradient-protein" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+              </div>
+              <div class="d-flex justify-content-between text-muted-custom fs-8 mt-1">
+                <span id="dash-protein-consumed-label">0 g consumidas</span>
+                <span id="dash-protein-remaining">Faltan 200 g</span>
+              </div>
+            </div>
             <p class="fs-8 text-muted-custom mt-3" id="dash-remaining-calories">Faltan 2000 kcal para el ideal.</p>
             <div class="d-flex flex-wrap gap-3 mt-3">
               <button class="btn btn-sm btn-link text-warning p-0 text-decoration-none d-flex align-items-center" id="btn-edit-target">
@@ -174,6 +187,9 @@
               </button>
               <button class="btn btn-sm btn-link text-info p-0 text-decoration-none d-flex align-items-center" id="btn-edit-max">
                 <i data-lucide="gauge" class="me-1 fs-7"></i> Ajustar Máximo
+              </button>
+              <button class="btn btn-sm btn-link text-success p-0 text-decoration-none d-flex align-items-center" id="btn-edit-protein">
+                <i data-lucide="beef" class="me-1 fs-7"></i> Ajustar Proteínas
               </button>
             </div>
           </div>
@@ -783,6 +799,29 @@
         <div class="modal-footer border-0 pt-0">
           <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
           <button type="button" class="btn btn-info btn-sm" id="btn-save-max-calories">Guardar Cambios</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para ajustar objetivo de proteínas -->
+  <div class="modal fade" id="modalProteinTarget" tabindex="-1" aria-labelledby="modalProteinTargetLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass-card border-0">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold text-white" id="modalProteinTargetLabel">Ajustar Objetivo de Proteínas</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <div class="mb-3">
+            <label for="input-protein-target" class="form-label text-muted-custom">Objetivo diario de proteínas (g)</label>
+            <input type="number" class="form-control glass-input text-white" id="input-protein-target" min="20" max="500" step="5">
+            <div class="form-text text-muted-custom fs-8">Cantidad de proteína que buscas consumir por día. Por defecto: 200 g.</div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success btn-sm" id="btn-save-protein-target">Guardar Cambios</button>
         </div>
       </div>
     </div>

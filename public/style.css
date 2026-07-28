@@ -298,7 +298,14 @@ h1, h2, h3, h4, h5, h6, .brand-text {
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
 }
 
-.progress-custom-max {
+.bg-gradient-protein {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 20px;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+
+.progress-custom-max,
+.progress-custom-protein {
   height: 8px;
 }
 

@@ -178,6 +178,7 @@ let measurementsChart = null;
 let tempAnalysisResults = [];
 let bootstrapTargetModal = null;
 let bootstrapMaxModal = null;
+let bootstrapProteinModal = null;
 let bootstrapMeasureModal = null;
 let currentGeminiQueryId = null; // ID de la consulta Gemini actual
 let isGeminiQueryInFlight = false;
@@ -266,6 +267,14 @@ function getCalorieMax() {
 }
 function setCalorieMax(value) {
   localStorage.setItem('auraCalMax', value);
+}
+
+// Objetivo diario de proteínas (gramos)
+function getProteinTarget() {
+  return parseInt(localStorage.getItem('auraProteinTarget') || '200', 10);
+}
+function setProteinTarget(value) {
+  localStorage.setItem('auraProteinTarget', value);
 }
 
 function estimateFatLossLbs(deficitKcal) {
@@ -484,9 +493,12 @@ async function loadDashboard() {
   try {
     const target = getCalorieTarget();
     const maxCalories = getCalorieMax();
+    const proteinTarget = getProteinTarget();
     document.getElementById('dash-calories-target-val').textContent = target;
     const maxEl = document.getElementById('dash-calories-max-val');
     if (maxEl) maxEl.textContent = maxCalories;
+    const proteinTargetEl = document.getElementById('dash-protein-target-val');
+    if (proteinTargetEl) proteinTargetEl.textContent = proteinTarget;
 
     // Obtener alimentos del día desde MySQL
     const result = await API.getComidasByDate(selectedDate);
@@ -560,6 +572,39 @@ async function loadDashboard() {
         progressBarMax.style.background = '';
         progressBarMax.style.boxShadow = '';
         progressBarMax.classList.add('bg-gradient-max');
+      }
+    }
+
+    // Barra de objetivo de proteínas
+    const proteinProgressPct = proteinTarget > 0 ? Math.round((proteinToday / proteinTarget) * 100) : 0;
+    const proteinBarPct = Math.min(proteinProgressPct, 100);
+    const proteinPctEl = document.getElementById('dash-protein-pct');
+    if (proteinPctEl) proteinPctEl.textContent = `${proteinProgressPct}%`;
+
+    const proteinConsumedLabel = document.getElementById('dash-protein-consumed-label');
+    if (proteinConsumedLabel) proteinConsumedLabel.textContent = `${proteinToday.toFixed(1)} g consumidas`;
+
+    const proteinRemaining = Math.max(proteinTarget - proteinToday, 0);
+    const proteinRemainingEl = document.getElementById('dash-protein-remaining');
+    if (proteinRemainingEl) {
+      proteinRemainingEl.textContent = proteinToday >= proteinTarget
+        ? '¡Objetivo de proteínas alcanzado!'
+        : `Faltan ${proteinRemaining.toFixed(1)} g`;
+    }
+
+    const progressBarProtein = document.getElementById('dash-progress-bar-protein');
+    if (progressBarProtein) {
+      progressBarProtein.style.width = `${proteinBarPct}%`;
+      progressBarProtein.setAttribute('aria-valuenow', proteinBarPct);
+
+      if (proteinToday > proteinTarget) {
+        progressBarProtein.classList.remove('bg-gradient-protein');
+        progressBarProtein.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+        progressBarProtein.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.35)';
+      } else {
+        progressBarProtein.style.background = '';
+        progressBarProtein.style.boxShadow = '';
+        progressBarProtein.classList.add('bg-gradient-protein');
       }
     }
 
@@ -1953,6 +1998,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   bootstrapTargetModal = new bootstrap.Modal(document.getElementById('modalTargetCalories'));
   bootstrapMaxModal = new bootstrap.Modal(document.getElementById('modalMaxCalories'));
+  bootstrapProteinModal = new bootstrap.Modal(document.getElementById('modalProteinTarget'));
   const measureModalEl = document.getElementById('modalNewMeasure');
   if (measureModalEl) bootstrapMeasureModal = new bootstrap.Modal(measureModalEl);
 
@@ -2002,6 +2048,24 @@ document.addEventListener('DOMContentLoaded', () => {
     setCalorieMax(val);
     bootstrapMaxModal.hide();
     showAlert('¡Máximo calórico actualizado!', 'success');
+    loadDashboard();
+  });
+
+  document.getElementById('btn-edit-protein')?.addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('input-protein-target').value = getProteinTarget();
+    bootstrapProteinModal.show();
+  });
+
+  document.getElementById('btn-save-protein-target')?.addEventListener('click', () => {
+    const val = parseInt(document.getElementById('input-protein-target').value, 10);
+    if (isNaN(val) || val < 20 || val > 500) {
+      showAlert('Introduce un objetivo de proteínas razonable (20 - 500 g).', 'warning');
+      return;
+    }
+    setProteinTarget(val);
+    bootstrapProteinModal.hide();
+    showAlert('¡Objetivo de proteínas actualizado!', 'success');
     loadDashboard();
   });
 
